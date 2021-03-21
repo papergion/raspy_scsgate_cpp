@@ -25,11 +25,12 @@ INC		:= -I$(CURDIR)/../easysocket/include
 
 build:
 	(cd ../easysocket && make TARGETDIR="$(TARGETDIR)")
-#	$(CC) $(CFLAGS) $(INC) scslog.c  -o $(TARGETDIR)/$(call MakeExe,scslog) $(LIB)
-#	$(CC) $(CFLAGS) $(INC) scstcp.c  -o $(TARGETDIR)/$(call MakeExe,scstcp) $(LIB)
-#	$(CC) $(CFLAGS) $(INC) scsmonitor.c  -o $(TARGETDIR)/$(call MakeExe,scsmonitor) $(LIB)
-#	$(CC) $(CFLAGS) $(INC) scsfirmware.c  -o $(TARGETDIR)/$(call MakeExe,scsfirmware) $(LIB)
-#	$(CC) $(CFLAGS) $(INC) scsgate_x.c scs_mqtt.c scs_hue.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsgate_x) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scslog.c  -o $(TARGETDIR)/$(call MakeExe,scslog) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scstcp.c  -o $(TARGETDIR)/$(call MakeExe,scstcp) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scsmonitor.c  -o $(TARGETDIR)/$(call MakeExe,scsmonitor) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scsfirmware.c  -o $(TARGETDIR)/$(call MakeExe,scsfirmware) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scsgate_x.c scs_mqtt.c scs_hue.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsgate_x) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scsgate_y.c scs_mqtt_y.c scs_hue.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsgate_y) $(LIB)
 	$(CC) $(CFLAGS) $(INC) scsdiscover.c scs_mqtt_disc.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsdiscover) $(LIB)
 
 template:

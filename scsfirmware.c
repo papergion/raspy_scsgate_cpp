@@ -42,6 +42,7 @@
 struct termios tios_bak;
 struct termios tios;
 int	   fduart = 0;
+char   force = 0;
 // =============================================================================================
   typedef union _WORD_VAL
   {
@@ -112,7 +113,7 @@ long ret;
 // ===================================================================================
 static void print_usage(const char *prog)
 {
-	printf("Usage: %s [-Dfcu]\n", prog);
+	printf("Usage: %s [-fuv]\n", prog);
 	puts("  -f --file     firmware file name (bin)\n"
 		 "  -u --update   true firmware update\n");
 	exit(1);
@@ -129,13 +130,13 @@ static char parse_opts(int argc, char *argv[])
 	while (1) {
 		static const struct option lopts[] = {
 			{ "file",      1, 0, 'f' },
-			{ "update",    0, 0, 'u' },
+			{ "update",    2, 0, 'u' },
 			{ "verbose",   0, 0, 'v' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "D:f:uv ", lopts, NULL);
+		c = getopt_long(argc, argv, "D:f:u::v ", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -148,6 +149,8 @@ static char parse_opts(int argc, char *argv[])
 		case 'u':
             printf("true UPDATE\n"); 
 			prog_mode = 2;	// programmazione vera
+			if (optarg) 
+				force=1;
 			break;
 		case 'v':
             printf("Verbose\n"); 
@@ -217,7 +220,7 @@ int setFirst(void)
   rx_max = 16;
   rx_len = 0;
   rxBufferLoad(100);
-  if (memcmp(rx_buffer,"SCS ",3) == 0)
+  if ((memcmp(rx_buffer,"SCS ",3) == 0) || (force))
   {
 	  printf("===============> %s <================\n",rx_buffer);
   }

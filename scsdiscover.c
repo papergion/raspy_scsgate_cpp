@@ -245,9 +245,12 @@ void BufferPublishDiscover(char * decBuffer)
 	  devtype = aTOchar(stype);
 	  busdevType[(int)device] = devtype;
 
-	  printf("device %2X tipo %02u - %s \n",device,devtype,alexadescr);
-
-	  MQTTpublishDiscover(busid, alexadescr, devtype);
+	  if (devtype < 18)
+	  {
+	    printf("\n------------------------------------------------------------------------------\n");
+		printf("device %02X tipo %02u - %s \n",device,devtype,alexadescr);
+		MQTTpublishDiscover(busid, alexadescr, devtype);
+	  }
 	} // deviceX > 0
   }  // busid != ""
 }	
