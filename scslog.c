@@ -175,12 +175,12 @@ int setFirst(void)
   requestBuffer[requestLen++] = '@';
   requestBuffer[requestLen++] = 0xF1; // set led lamps std-freq (client mode)
 
+  requestBuffer[requestLen++] = '@';
+  requestBuffer[requestLen++] = 'l'; // (in 0x17)
+
   requestBuffer[requestLen++] = '@'; 
   requestBuffer[requestLen++] = 'M'; // (in 0x17)
   requestBuffer[requestLen++] = 'X'; // (in 0x17)
-
-  requestBuffer[requestLen++] = '@';
-  requestBuffer[requestLen++] = 'l'; // (in 0x17)
   n = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
 
   mSleep(50);
@@ -188,7 +188,7 @@ int setFirst(void)
   rxBufferLoad(100);
 
   requestLen = 0;
-  requestBuffer[requestLen++] = '§';
+  requestBuffer[requestLen++] = '@';
   requestBuffer[requestLen++] = 'Q'; 
   requestBuffer[requestLen++] = 'Q'; 
   n = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
 			if (verbose)
 			{
 				fprintf(stderr,"-rx-> ");	// scrittura a video
-				for (i=1; i<rx_len; i++)
+				for (i=0; i<rx_len; i++)
 				{
 					fprintf(stderr,"%02X ",rx_buffer[i]);
 				}
