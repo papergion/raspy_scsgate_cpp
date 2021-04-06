@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_X "
-#define VERSION  "1.20"
+#define VERSION  "1.62"
 //#define KEYBOARD
 
 // =============================================================================================
@@ -1133,6 +1133,9 @@ int main(int argc, char *argv[])
 		}
 		else
 			timeToexec--;
+
+		if (mqttgate) 
+			publish_dequeue();
 
 		if (mqttgate) 
 			MQTTverify();

@@ -30,15 +30,17 @@ static char mqVerbose = 0;
 static char mqttopen = 0;  //0=spento    1=richiesto    2=in corso     3=connesso
 static char domoticMode = 'H';
 static char mqttAddress[24];
+static int	volatile MQTTbusy = 0;
 // =============================================================================================
 extern std::vector<bus_scs_queue> _schedule_b;
+	   std::vector<publish_queue> _publish_b;
 // =============================================================================================
 MQTTClient client;
 MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
 MQTTClient_message pubmsg = MQTTClient_message_initializer;
 MQTTClient_deliveryToken token;
 // =============================================================================================
-void publish(char * pTopic, char * pPayload, int retain);
+void delivered(void *context, MQTTClient_deliveryToken dt);
 // =============================================================================================
 void mqSleep(int millisec);
 void uqSleep(int microsec);
@@ -94,16 +96,15 @@ int processMessage(char * topicName, char * payLoad)
   char reply = 0;
   char command = 0xFF;
   char value = 0;
-  char rtopic[24];
-  char rpayload[24];
+  publish_queue to_publish;
         
-  strcpy(rpayload, payLoad);
+  strcpy(to_publish.payload, payLoad);
 
 // --------------------------------------- SWITCHES -------------------------------------------
   if (memcmp(topicName, SWITCH_SET, sizeof(SWITCH_SET) - 1) == 0)
   {
     devtype = 1; // switch
-    strcpy(rtopic, SWITCH_STATE);
+    strcpy(to_publish.topic, SWITCH_STATE);
     reply = 1;
     dev[0] = *(topicName + sizeof(SWITCH_SET) - 1);
     dev[1] = *(topicName + sizeof(SWITCH_SET));
@@ -122,7 +123,7 @@ int processMessage(char * topicName, char * payLoad)
   if (memcmp(topicName, BRIGHT_SET, sizeof(BRIGHT_SET) - 1) == 0)
   {
     devtype = 3; // light
-    strcpy(rtopic, BRIGHT_STATE);
+    strcpy(to_publish.topic, BRIGHT_STATE);
     reply = 1;
     dev[0] = *(topicName + sizeof(BRIGHT_SET) - 1);
     dev[1] = *(topicName + sizeof(BRIGHT_SET));
@@ -145,7 +146,7 @@ int processMessage(char * topicName, char * payLoad)
   if (memcmp(topicName, COVER_SET, sizeof(COVER_SET) - 1) == 0)
   {
     devtype = 8; // cover
-    strcpy(rtopic, COVER_STATE);
+    strcpy(to_publish.topic, COVER_STATE);
     reply = 1;
     dev[0] = *(topicName + sizeof(COVER_SET) - 1);
     dev[1] = *(topicName + sizeof(COVER_SET));
@@ -158,7 +159,7 @@ int processMessage(char * topicName, char * payLoad)
 	{
 	  command = 0x09;
       if ((domoticMode == 'h') || (domoticMode == 'H')) // home assistant
-	      strcpy(rpayload, "closed");
+	      strcpy(to_publish.payload, "closed");
 	}
     else if (memcmp(payLoad, "OFF", 3) == 0)
       command = 0x08;
@@ -166,7 +167,7 @@ int processMessage(char * topicName, char * payLoad)
 	{
 	  command = 0x08;
       if ((domoticMode == 'h') || (domoticMode == 'H')) // home assistant
-	      strcpy(rpayload, "open");
+	      strcpy(to_publish.payload, "open");
 	}
     else if (memcmp(payLoad, "STOP", 4) == 0)
       command = 0x0A;
@@ -180,7 +181,7 @@ int processMessage(char * topicName, char * payLoad)
   {
 
     devtype = 9; // cover
-    strcpy(rtopic, COVERPCT_STATE);
+    strcpy(to_publish.topic, COVERPCT_STATE);
     reply = 0;
     dev[0] = *(topicName + sizeof(COVERPCT_SET) - 1);
     dev[1] = *(topicName + sizeof(COVERPCT_SET));
@@ -202,7 +203,7 @@ int processMessage(char * topicName, char * payLoad)
 //	  command = 2;
 	  command = 0x09;
       if ((domoticMode == 'h') || (domoticMode == 'H')) // home assistant
-	      strcpy(rpayload, "closed");
+	      strcpy(to_publish.payload, "closed");
 	}
 
     else if (memcmp(payLoad, "OFF", 3) == 0)
@@ -215,7 +216,7 @@ int processMessage(char * topicName, char * payLoad)
 //	  command = 1;
 	  command = 0x08;
       if ((domoticMode == 'h') || (domoticMode == 'H')) // home assistant
-	      strcpy(rpayload, "open");
+	      strcpy(to_publish.payload, "open");
 	}
 	else
 	{
@@ -232,7 +233,7 @@ int processMessage(char * topicName, char * payLoad)
   if (memcmp(topicName, GENERIC_SET, sizeof(GENERIC_SET) - 1) == 0)
   {
     devtype = 11; // generic
-//  strcpy(rtopic, GENERIC_STATE);
+//  strcpy(to_publish.topic, GENERIC_STATE);
     reply = 0;
     dev[0] = *(topicName + sizeof(GENERIC_SET) - 1);
     dev[1] = *(topicName + sizeof(GENERIC_SET));
@@ -269,10 +270,10 @@ int processMessage(char * topicName, char * payLoad)
   // ----------------------------------------------------------------------------------------------
   if ((reply == 1) && (device != 0) && (devtype != 0))
   { // device valido 
-	  strcat(rtopic, dev);
-	  if (mqVerbose) 	fprintf(stderr,"pub WR\n");
-	  publish(rtopic, rpayload, 1);
-	  if (mqVerbose) 	fprintf(stderr,"pub OK\n");
+	  strcat(to_publish.topic, dev);
+	  if (mqVerbose) 	fprintf(stderr,"pub schedule\n");
+	  to_publish.retain = 1;
+	  _publish_b.push_back(to_publish);
   }       // device valido
   // ----------------------------------------------------------------------------------------------
 
@@ -364,7 +365,7 @@ int MQTTconnect(char * broker, char * user, char * password, char verbose)
 //	conn_opts.username = "pippo";
 //	conn_opts.password = "paperino";
 
-    MQTTClient_setCallbacks(client, NULL, connlost, msgarrvd, NULL);
+    MQTTClient_setCallbacks(client, NULL, connlost, msgarrvd, delivered);	// MQTT ASINCRONO - procedure di callback x ---, connection lost, message arrived, delivery complete
 
 	if ((rc = MQTTClient_connect(client, &conn_opts)) != MQTTCLIENT_SUCCESS)
     {
@@ -417,14 +418,50 @@ void publish(char * pTopic, char * pPayload, int retain)
 	if (mqttopen != 3)  
 		return;
 
-	if (mqVerbose>1) printf("topic: %s    payload: %s \n",pTopic,pPayload);
+	if (mqVerbose>1) fprintf(stderr,".");
+	while (MQTTbusy)
+	{
+		mqSleep(1);
+	}
+
+	if (mqVerbose>1) fprintf(stderr,"publish topic: %s    payload: %s \n",pTopic,pPayload);
 
 	pubmsg.payload = pPayload;
     pubmsg.payloadlen = (int)strlen(pPayload);
     pubmsg.qos = QOS;
     pubmsg.retained = retain;
+
+	MQTTbusy = 1;
     MQTTClient_publishMessage(client, pTopic, &pubmsg, &token);
     MQTTClient_waitForCompletion(client, token, TIMEOUT);
+}
+
+// ===================================================================================
+void publish_dequeue(void)
+// ===================================================================================
+{
+	if ((_publish_b.size() > 0) && (MQTTbusy == 0))
+	{
+		pubmsg.payload = _publish_b[0].payload;
+		pubmsg.payloadlen = (int)strlen(_publish_b[0].payload);
+		pubmsg.qos = QOS;
+		pubmsg.retained = _publish_b[0].retain;
+		MQTTbusy = 2;
+		MQTTClient_publishMessage(client, (_publish_b[0].topic), &pubmsg, &token);
+		MQTTClient_waitForCompletion(client, token, TIMEOUT);
+		_publish_b.erase(_publish_b.begin());
+	}
+}
+// ===================================================================================
+void delivered(void *context, MQTTClient_deliveryToken dt)
+// ===================================================================================
+// è arrivato un messaggio MQTT - processo
+// ===================================================================================
+{
+	(void) context;
+	(void) dt;
+	if (mqVerbose>1) fprintf(stderr,"Delivered!\n");
+	MQTTbusy = 0;
 }
 // ===================================================================================
 void MQTTverify(void)

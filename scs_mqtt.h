@@ -9,7 +9,7 @@
 
 #define CLIENTID    "Raspy_SCS_1"
 #define QOS         1
-#define TIMEOUT     10L	// millisecondi
+#define TIMEOUT     20L	// millisecondi
 
 // =============================================================================================
 #define		_MODO "SCS"
@@ -42,6 +42,12 @@
 #define		SUBSCRIBE3 MYPFX "/+/setposition/+"
 // =============================================================================================
 typedef struct {
+    char topic[24];
+    char payload[8];
+    char retain;
+} publish_queue;
+// =============================================================================================
+typedef struct {
     char busid;
     char bustype;
     char buscommand;
@@ -55,5 +61,8 @@ void MQTTverify(void);
 void MQTTstop(void);
 char MQTTrequest(bus_scs_queue * busdata);
 char MQTTcommand(bus_scs_queue * busdata);
+// ===================================================================================
+void publish(char * pTopic, char * pPayload, int retain);
+void publish_dequeue(void);
 // ===================================================================================
 #endif
