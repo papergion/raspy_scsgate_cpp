@@ -347,6 +347,8 @@ int MQTTconnect(char * broker, char * user, char * password, char verbose)
     int rc;
 	if (*broker == 0) return 0;
 
+	_publish_b.clear();
+
 	mqVerbose = verbose;
 	strcpy(mqttAddress, broker);
 

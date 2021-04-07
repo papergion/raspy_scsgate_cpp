@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_Y "
-#define VERSION  "1.62"
+#define VERSION  "1.63"
 // indirizzo i2c base specificato da optarg -Ixx  (default 30) - si considera solo HB
 // type da 0x30 a 0x3F corrispondono ad indirizzi di interfacce i2c di OUTPUT(si considera solo LB)
 // type da 0x40 a 0x4F corrispondono ad indirizzi di interfacce i2c di INPUT (si considera solo LB)
