@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * ---------------------------------------------------------------------------*/
 #define PROGNAME "SCSMONITOR "
-#define VERSION  "1.00"
+#define VERSION  "1.04"
 
 #include <stdint.h>
 #include <unistd.h>
@@ -43,12 +43,23 @@
 struct	tm *	timeinfo;
 char	pduFormat = 0;
 char	deviceFrom = 0;
+char	my_busid = 0;
+char	extended = 0;
 // =============================================================================================
 struct termios tios_bak;
 struct termios tios;
 // =============================================================================================
-char aConvert(char * aData);
 void msleep(int millisec);
+// =============================================================================================
+char axTOchar(char * aData);
+// =============================================================================================
+char axTOchar(char * aData)
+{
+char *ptr;
+long ret;
+    ret = strtoul(aData, &ptr, 16);
+    return (char) ret;
+}
 // =============================================================================================
 void initkeyboard(void){
     tcgetattr(0,&tios_bak);
@@ -67,14 +78,6 @@ void endkeyboard(void){
     tcsetattr(0,TCSAFLUSH,&tios_bak);
 }
 // =============================================================================================
-char aConvert(char * aData)
-{
-char *ptr;
-long ret;
-    ret = strtoul(aData, &ptr, 16);
-    return (char) ret;
-}
-// ===================================================================================
 int getinWait( void )
 {
 	int ch;
@@ -91,6 +94,61 @@ int getinNowait( void )
 }
 // ===================================================================================
 
+
+
+// ===================================================================================
+static void print_usage(const char *prog)	// NOT USED
+{
+	printf("Usage: %s [-ixx]\n", prog);
+	puts("  -ixx --mybusid (xx) \n"
+		 );
+	exit(1);
+}
+// ===================================================================================
+static char parse_opts(int argc, char *argv[])	// NOT USED
+{
+	if ((argc < 1) || (argc > 2))
+	{
+		print_usage(PROGNAME);
+		return 3;
+	}
+
+	while (1) {
+		static const struct option lopts[] = {
+//------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
+			{ "mybusid",    1, 0, 'i' },
+			{ "help",		0, 0, '?' },
+			{ NULL, 0, 0, 0 },
+		};
+		int c;
+		c = getopt_long(argc, argv, "i:h ", lopts, NULL);
+		if (c == -1)
+			return 0;
+
+		switch (c) {
+		case 'h':
+			print_usage(PROGNAME);
+			break;
+		case 'i':
+			if (optarg) 
+				my_busid=axTOchar(optarg);
+			printf("my bus id: 0x%X\n",my_busid);
+			extended = 1;
+//			i2cbase <<= 4; // da LB a HB
+			break;
+
+		case '?':
+            fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+			return 2;		
+
+		default:
+			print_usage(argv[0]);
+			break;
+		}
+	}
+	return 0;
+}
+// ===================================================================================
 
 
 
@@ -110,13 +168,13 @@ void msleep(int millisec) {
 // ===================================================================================
 int main(int argc, char *argv[])
 {
-	(void) argc;
-	(void) argv;
-
 	initkeyboard();
 	atexit(endkeyboard);
 	
-	printf(PROGNAME "\n");
+	printf(PROGNAME VERSION "\n");
+	if (parse_opts(argc, argv))
+		return 0;
+
 	printf("UART_Initialization\n");
 	int fd = -1;
 	
@@ -157,6 +215,20 @@ int main(int argc, char *argv[])
 	n = write(fd,&c,1);			// per evitare memo setup in eeprom
 	n = write(fd,"@MA@o@l",7);	// modalita ascii, senza abbreviazioni, log attivo 
 	msleep(10);					// pausa
+
+	if (extended == 1)
+	{
+		n = write(fd,"@O1",3);		// option (ASCII)
+		c = my_busid+'0';			// 
+		n = write(fd,&c,1);			// busid (ASCII)
+	}
+	else
+	{
+		n = write(fd,"@O0",3);		// option (ASCII)
+		c = '0';			// 
+		n = write(fd,&c,1);			// busid (ASCII)
+	}
+
 	n = write(fd,"@h",2);		// help
 	char cb;
 	while (1)

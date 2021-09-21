@@ -4,8 +4,9 @@
  *      -  serial port hardware enabled YES
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
-#define PROGNAME "SCSGATE_Y "
-#define VERSION  "1.63"
+#define PROGNAME "SCSGATE_Z "
+#define VERSION  "1.75"
+// =========================== GESTIONE IMPIANTI ESTESI ==============================
 // =========================== GESTIONE DEVICES FISICI LOCALI ========================
 // indirizzo i2c base specificato da optarg -Ixx  (default 30) - si considera solo HB
 // type da 0x30 a 0x3F corrispondono ad indirizzi di interfacce i2c di OUTPUT(si considera solo LB)
@@ -60,8 +61,8 @@
 #include <linux/if_link.h>
 
 #include <vector>
-#include "scs_mqtt_y.h"
-#include "scs_hue.h"
+#include "scs_mqtt_z.h"
+#include "scs_hue_z.h"
 
 using namespace std;
 // =============================================================================================
@@ -79,7 +80,7 @@ char    i2cgate = 0;		// accesso schede locali i2c
 char    i2cbase = 3;		// default i2c local address (High Byte)
 //char	i2caddress;
 char	i2cON = 0;			// stato di rele ON su uscita I2C
-char	i2cOUT[16];				// valore corrente uscite i2c (una per ogni sub-address)
+char	i2cOUT[16];			// valore corrente uscite i2c (una per ogni sub-address)
 int		i2cx;
 int		i2ctimer = 0;
 char	i2cswitch = 0;
@@ -102,6 +103,8 @@ char    uartgate = 1;		// connessione in/out serial0 (uart)
 char	mqttbroker[24] = {0};
 char	user[24] = {0};
 char	password[24] = {0};
+char	my_busid = 0;
+char	extended = 0;
 // =============================================================================================
 struct termios tios_bak;
 struct termios tios;
@@ -111,10 +114,11 @@ int	   fdi2c = 0;
 FILE   *fConfig;
 char	filename[64];
 int  timeToClose = 0;
+#define MAXDEV 256*10
 // =============================================================================================
   typedef union _WORD_VAL
   {
-    int  Val;
+    uint16_t  Val;
     char v[2];
     struct
     {
@@ -124,6 +128,7 @@ int  timeToClose = 0;
   } WORD_VAL;
 // =============================================================================================
 char axTOchar(char * aData);
+WORD_VAL axTOword(char * aData);
 char aTOchar (char * aData);
 int  aTOint  (char * aData);
 
@@ -137,9 +142,9 @@ char i2cInpBusAddress[16][8] = {0};	// command address i2c sw di input
 
 int ixpoll = 255;
 char	i2cIN[16];			// valore corrente ingressi i2c (una per ogni sub-address)
-char busdevCmd[256] = {0};	// puntatore da device input a device output
+char busdevCmd[MAXDEV] = {0};	// puntatore da device input a device output
 // =============================================================================================
-char busdevType[256] = {0};
+char busdevType[MAXDEV] = {0};
 				// 0x01:1-switch				
 				// 0x03:3-dimmer SCS	   
 				// 0x04:4-dimmer KNX on/off			0x18:24-dimmer KNX up/dw		   
@@ -150,8 +155,8 @@ char busdevType[256] = {0};
 				// 0x30-0x3F:48-63 - rele o pulsanti i2c
 				// 0x40-0x4F:64-79 - pulsanti i2c
 
-char busdevHue [256] = {0};
-char busdevState[256] = {1};
+char busdevHue [MAXDEV] = {0};
+char busdevState[MAXDEV] = {1};
 
 extern std::vector<hue_device_t> _devices;
 std::vector<hue_scs_queue> _schedule;
@@ -183,9 +188,6 @@ int     rx_len;
 int     rx_max = 250;
 char    rx_internal;
 // ===================================================================================
-char axTOchar(char * aData);
-char aTOchar(char * aData);
-int	 aTOint(char * aData);
 int  setFirst(void);
 static void print_usage(const char *prog);
 static char parse_opts(int argc, char *argv[]);
@@ -230,6 +232,14 @@ char *ptr;
 long ret;
     ret = strtoul(aData, &ptr, 16);
     return (char) ret;
+}
+// =============================================================================================
+WORD_VAL axTOword(char * aData)
+{
+char *ptr;
+WORD_VAL ret;
+    ret.Val = strtoul(aData, &ptr, 16);
+    return ret;
 }
 // =============================================================================================
 char aTOchar(char * aData)
@@ -675,16 +685,26 @@ int	waitReceive(char w)
 // ===================================================================================
 void bufferPicLoad(char * decBuffer)
 {
-  char busid[8];
+  char busaddress[8];
   char device;
+//  char bus_id = 0;
   char devtype;
   char alexadescr[32] = {0};
   char stype[8];
 
-  tcpJarg(decBuffer,"\"device\"",busid);
-  if (busid[0] != 0)
+  tcpJarg(decBuffer,"\"device\"",busaddress);
+  if (busaddress[0] != 0)
   {
-	device = axTOchar(busid);
+	if (extended)
+	{
+		WORD_VAL device_ext = axTOword(busaddress);
+		device = device_ext.byte.LB;
+//		bus_id = device_ext.byte.HB;
+	}
+	else
+	{
+		device = axTOchar(busaddress);
+	}
 	if ((device) && (uartgate)) 
 	{
 	  tcpJarg(decBuffer,"\"descr\"",alexadescr);
@@ -696,6 +716,7 @@ void bufferPicLoad(char * decBuffer)
 		  devtype = axTOchar(&stype[2]);
 	  else
 		  devtype = aTOchar(stype);
+
 //	  devType[(int)device] = devtype;
 
 	  if (devtype == 0x09)			// w6 - aggiorna tapparelle pct su pic
@@ -727,9 +748,10 @@ void bufferPicLoad(char * decBuffer)
 //					maxp.Val = 0;
 
 	} // deviceX > 0
-  }  // busid != ""
+  }  // busaddress != ""
   else
   {
+// {"coverpct":"false","devclear":"true","extended":"true","busid":"00"}
 	  char cover[8];
 	  tcpJarg(decBuffer,"\"coverpct\"",cover);
 	  if ((strcmp(cover,"false") == 0) && (uartgate)) 
@@ -740,21 +762,74 @@ void bufferPicLoad(char * decBuffer)
 		if (waitReceive('k') == 0)
 			printf("  -->PIC communication ERROR...\n");
 	  }  // cover == "false"
+	  char extend[8];
+	  char cbusid[8];
+	  tcpJarg(decBuffer,"\"extended\"",extend);
+	  if ((strcmp(extend,"true") == 0) && (uartgate)) 
+	  {
+		if (verbose)
+		  printf("EXTENDED mode\n");
+		extended = 1;
+		tcpJarg(decBuffer,"\"busid\"",cbusid);
+		my_busid=axTOchar(cbusid);
+
+		write(fduart,"§O1",3);		// option (ASCII)
+		char c = my_busid+'0';		// 
+		write(fduart,&c,1);			// busid (ASCII)
+
+	  }  // cover == "false"
+	  else
+	  {
+		if (verbose)
+		  printf("...\n");
+	  }
+//	  else
+//	  {
+//		write(fduart,"@O00",4);		// option (ASCII)
+//	  }
   }
 }	
 // ===================================================================================
 void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 {
-  char busid[8];
+  char busaddress[8];
   char device;
+//  char bus_id = 0;
+  int  devix = 0;
   char devtype;
   char alexadescr[32] = {0};
   char stype[8];
 
-  tcpJarg(decBuffer,"\"device\"",busid);
-  if (busid[0] != 0)
+  char extend[8];
+  char cbusid[8];
+  tcpJarg(decBuffer,"\"extended\"",extend);
+  if ((strcmp(extend,"true") == 0) && (uartgate)) 
   {
-	device = axTOchar(busid);
+	if (verbose)
+	  printf("EXTENDED mode\n");
+	extended = 1;
+	tcpJarg(decBuffer,"\"busid\"",cbusid);
+	my_busid=axTOchar(cbusid);
+	write(fduart,"§O1",3);		// option (ASCII)
+	char c = my_busid+'0';		// 
+	write(fduart,&c,1);			// busid (ASCII)
+  }
+
+  tcpJarg(decBuffer,"\"device\"",busaddress);
+  if (busaddress[0] != 0)
+  {
+	if (extended)
+	{
+		WORD_VAL device_ext = axTOword(busaddress);
+		device = device_ext.byte.LB;
+//		bus_id = device_ext.byte.HB;
+		devix = device_ext.Val;
+	}
+	else
+	{
+		device = axTOchar(busaddress);
+		devix = device;
+	}
 	if (device)
 	{
 	  tcpJarg(decBuffer,"\"descr\"",alexadescr);
@@ -767,20 +842,24 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 	  else
 		  devtype = aTOchar(stype);
 //	  devType[(int)device] = devtype;
-	  busdevType[(int)device] = devtype;
+	  busdevType[devix] = devtype;
 
 	  char scmd[8];
 	  tcpJarg(decBuffer,"\"cmd\"",scmd);
-	  busdevCmd[(int)device] = axTOchar(scmd);
+	  busdevCmd[devix] = axTOchar(scmd);
 	  if (verbose)
+	  {
+		if (extended)
+		  printf("device %04X tipo %02u (0x%02X) - %s %s \n",devix,devtype,devtype,alexadescr,scmd);
+		else
 		  printf("device %02X tipo %02u (0x%02X) - %s %s \n",device,devtype,devtype,alexadescr,scmd);
-
+	  }
 	  if ((hueaction) && (devtype < 0x0B))		// w6 - alexa non ha bisogno dei types 0x0B 0x0C (11-12) 0x0E 0x0F 0x12 0x13 (18 19)
 	  {
           if (devtype == 0x09)
-			busdevHue[(int)device] = addDevice(alexadescr, 1,device);
+			busdevHue[devix] = addDevice(alexadescr, 1,device);
           else
-			busdevHue[(int)device] = addDevice(alexadescr, 128,device);
+			busdevHue[devix] = addDevice(alexadescr, 128,device);
 	  }
 	  if ((devtype >= 0x40) && (devtype <= 0x4F))	// i2c input 
 	  {
@@ -799,7 +878,7 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 				i2cInpDev[i] = i2cadr;
 				i2cInpMask[i] = i2cmask;
 				ixpoll = i;
-				i2cInpBusAddress[i][(int)i2cBusIx] = busdevCmd[(int)device];	// mask i2c sw di input
+				i2cInpBusAddress[i][(int)i2cBusIx] = busdevCmd[devix];	// mask i2c sw di input
 				i = 16;
 			}
 			else
@@ -813,18 +892,64 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 		} // while
 	  } // devtype >= 40 <= 4F
 	} // deviceX > 0
-  }  // busid != ""
+  }  // busaddress != ""
 }	
+// ===================================================================================
+void uart_request(WORD_VAL busaddress, char from, char request, char command)
+{
+	char requestBuffer[24];
+	int requestLen = 0;
+	if ((extended) && (busaddress.byte.HB != my_busid))
+	{
+	  requestBuffer[requestLen++] = '§';
+	  requestBuffer[requestLen++] = 'X';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
+
+	  requestBuffer[requestLen++] = 0xEC;	// extended frame
+	  requestBuffer[requestLen++] = busaddress.byte.HB; // to   bus device
+	  requestBuffer[requestLen++] = my_busid; // from   bus 
+	  requestBuffer[requestLen++] = 0;  
+
+	  requestBuffer[requestLen++] = busaddress.byte.LB; // to   device
+	  requestBuffer[requestLen++] = from;   // from device
+	  requestBuffer[requestLen++] = request;   // type:command
+	  requestBuffer[requestLen++] = command;// command
+	}
+	else
+	{
+	// comando §y<destaddress><source><type><command>
+	  requestBuffer[requestLen++] = '§';
+	  requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
+	  requestBuffer[requestLen++] = busaddress.byte.LB; // to   device
+	  requestBuffer[requestLen++] = from;   // from device
+	  requestBuffer[requestLen++] = request;   // type:command
+	  requestBuffer[requestLen++] = command;// command
+	}
+
+	if (requestLen > 0)
+	{
+		if (uartgate) write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
+		if (verbose)
+		{
+			printf("SCS cmd: %c %c ",requestBuffer[0],requestBuffer[1]);
+			for (int i=2;i<requestLen;i++)
+			{
+				printf("%02X ",requestBuffer[i]);
+			}
+			printf("\n");
+		}
+	}
+}
 // ===================================================================================
 void mqtt_dequeueExec( void)
 {
 	int  m = 0; // _schedule.begin();
-	char busid = _schedule_b[m].busid;
-	char bustype = busdevType[(int)busid];
+	WORD_VAL  busaddress;
+	busaddress.Val = _schedule_b[m].busaddress;
+	char bustype = busdevType[(int)busaddress.Val];
 	if (bustype == 0) 
 	{
 		bustype = _schedule_b[m].bustype;
-		busdevType[(int)busid] = bustype;
+		busdevType[(int)busaddress.Val] = bustype;
 	}
 //	int  hueid = (int) _schedule_b[m].hueid;
 	char command = _schedule_b[m].buscommand;
@@ -833,16 +958,16 @@ void mqtt_dequeueExec( void)
 	char from = _schedule_b[m].busfrom;
 	_schedule_b.erase(_schedule_b.begin());
 
-//	printf("dequeued - id:%02x  command:%02x  value:%d  bus:%02x  type:%02x  des: %s\n", hueid, huecommand, pctvalue, busid, bustype, _devices[hueid].name);
+//	printf("dequeued - id:%02x  command:%02x  value:%d  bus:%02x  type:%02x  des: %s\n", hueid, huecommand, pctvalue, busaddress, bustype, _devices[hueid].name);
 //	// comandi  01 accendi       02 spegni     04 alza / aumenta       05 abbassa 
 
-	busdevState[(int)busid] = command;
+	busdevState[(int)busaddress.Val] = command;
 	if (request != 0x15)
 	{
 		if ((bustype >= 0x30) && (bustype <= 0x3F))	// dispositivo i2c
 		{
 			bus_scs_queue _i2ccmd;
-			_i2ccmd.busid = busid;
+			_i2ccmd.busaddress = busaddress.byte.LB;
 			_i2ccmd.busfrom = 0;  
 			_i2ccmd.buscommand = command;
 			_i2ccmd.bustype = bustype;
@@ -853,37 +978,28 @@ void mqtt_dequeueExec( void)
 		{
 			char requestBuffer[24];
 			int requestLen = 0;
-			if ((command == 0xFF) && (busid != 0) && (bustype == 0x09))
+			if ((command == 0xFF) && (busaddress.Val != 0) && (bustype == 0x09))
 			{
 			  requestBuffer[requestLen++] = '§';
 			  requestBuffer[requestLen++] = 'u';    // 0x79 (@y: invia a pic da MQTT cmd tapparelle % da inviare sul bus)
-			  requestBuffer[requestLen++] = busid; // to   device
+			  requestBuffer[requestLen++] = busaddress.byte.LB; // to   device
 			  requestBuffer[requestLen++] = value;	// %
-			}
-			if ((command != 0xFF) && (busid != 0) && (bustype != 0))
-			{
-			//    if (devtype != 11)	// <====================not GENERIC=======================
-				{
-				  requestBuffer[requestLen++] = '§';
-				  requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
-				  requestBuffer[requestLen++] = busid; // to   device
-				  requestBuffer[requestLen++] = from;   // from device
-				  requestBuffer[requestLen++] = request;   // type:command
-				  requestBuffer[requestLen++] = command;// command
-				}
-			}
-			if (requestLen > 0)
-			{
-				if (uartgate) write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
-				if (verbose)
-				{
+			  if (uartgate) write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
+			  if (verbose)
+			  {
 					printf("SCS cmd from mqtt: %c %c ",requestBuffer[0],requestBuffer[1]);
 					for (int i=2;i<requestLen;i++)
 					{
 						printf("%02X ",requestBuffer[i]);
 					}
 					printf("\n");
-				}
+			  }
+			}
+			else
+			if ((command != 0xFF) && (busaddress.Val != 0) && (bustype != 0))
+			{
+			//    if (devtype != 11)	// <====================not GENERIC=======================
+				uart_request(busaddress, from, request,command);
 			}
 		}
 	}
@@ -896,12 +1012,13 @@ void hue_dequeueExec( void)
 	char huecommand = _schedule[m].huecommand;
 	char pctvalue = _schedule[m].pctvalue;
 	char huevalue = _schedule[m].huevalue;
-	char busid = _devices[hueid].busaddress;
-	char bustype = busdevType[(int)busid];
+	WORD_VAL  busaddress;
+	busaddress.Val = _devices[hueid].busaddress;
+	char bustype = busdevType[(int)busaddress.Val];
 	_schedule.erase(_schedule.begin());
 
 	if (verbose)
-		printf("dequeued - id:%02x  command:%02x  value:%d  bus:%02x  type:%02x  des: %s\n", hueid, huecommand, pctvalue, busid, bustype, _devices[hueid].name);
+		printf("dequeued - id:%02x  command:%02x  value:%d  addr:%02x  type:%02x  des: %s\n", hueid, huecommand, pctvalue, busaddress.Val, bustype, _devices[hueid].name);
 	// comandi  01 accendi       02 spegni     04 alza / aumenta       05 abbassa 
 
 	char requestBuffer[16];
@@ -914,19 +1031,22 @@ void hue_dequeueExec( void)
 	if ((bustype >= 0x30) && (bustype <= 0x3F))	// dispositivo i2c
 	{
 		bus_scs_queue _i2ccmd;
-		_i2ccmd.busid = busid;
+		_i2ccmd.busaddress = busaddress.byte.LB;
 	    _i2ccmd.busfrom = 0;  
 		_i2ccmd.buscommand = huecommand-1;
 		_i2ccmd.bustype = bustype;
 		_i2ccmd.busvalue = huevalue;
 		_i2ccmd.busrequest = 0x12;
 		I2Crequest(&_i2ccmd,2);
-		MQTTrequest(&_i2ccmd);
+		if (extended)
+			MQTTrequestExt(&_i2ccmd);
+		else
+			MQTTrequest(&_i2ccmd);
 		if (huecommand == 1)	// ON
 			setState(hueid, stato | 1, 128);
 		else				// OFF
 			setState(hueid, stato & 0xFE, 128);
-		busdevState[(int)busid] = huecommand-1;
+		busdevState[(int)busaddress.Val] = huecommand-1;
 	}
 	else
 	switch (bustype)
@@ -947,14 +1067,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 	    
-	// comando §y<destaddress><source><type><command>
-		requestBuffer[requestLen++] = '§';
-		requestBuffer[requestLen++] = 'y';
-		requestBuffer[requestLen++] = busid;   // to device id
-		requestBuffer[requestLen++] = 0x00;    // from device id
-		requestBuffer[requestLen++] = 0x12;    // command
-		requestBuffer[requestLen++] = command; // command char
-		busdevState[(int)busid] = command;
+	  uart_request(busaddress, 0, 0x12, command);
+	  busdevState[(int)busaddress.Val] = command;
 	  break;
 
 
@@ -965,14 +1079,14 @@ void hue_dequeueExec( void)
 		command = 0;
 		buscommand = 0;
 		setState(hueid, stato | 1, 0);
-		busdevState[(int)busid] = command;
+		busdevState[(int)busaddress.Val] = command;
 	  }
 	  else if (huecommand == 2) // spegni <----------------
 	  {
 		command = 1;
 		buscommand = 1;
 		setState(hueid, stato & 0xFE, 0);
-		busdevState[(int)busid] = command;
+		busdevState[(int)busaddress.Val] = command;
 	  }
 	  else if ((huecommand == 3) || (huecommand == 4) || (huecommand == 5)) // cambia il valore  <----------------
 	  {
@@ -994,13 +1108,7 @@ void hue_dequeueExec( void)
 	  else
 		break;
 
-	// comando §y<destaddress><source><type><command>
-		requestBuffer[requestLen++] = '§';
-		requestBuffer[requestLen++] = 'y';
-		requestBuffer[requestLen++] = busid;   // to device id
-		requestBuffer[requestLen++] = 0x00;    // from device id
-		requestBuffer[requestLen++] = 0x12;    // command
-		requestBuffer[requestLen++] = buscommand; // command char
+	  uart_request(busaddress, 0, 0x12, buscommand);
 	  break;
 
 
@@ -1028,13 +1136,7 @@ void hue_dequeueExec( void)
 	  else
 		break;
 
-	// comando §y<destaddress><source><type><command>
-		requestBuffer[requestLen++] = '§';
-		requestBuffer[requestLen++] = 'y';
-		requestBuffer[requestLen++] = busid;   // to device id
-		requestBuffer[requestLen++] = 0x00;    // from device id
-		requestBuffer[requestLen++] = 0x12;    // command
-		requestBuffer[requestLen++] = command; // command char
+ 	  uart_request(busaddress, 0, 0x12, command);
 	  break;
 
 	case 9:
@@ -1072,7 +1174,7 @@ void hue_dequeueExec( void)
 
 	  requestBuffer[requestLen++] = '§';
 	  requestBuffer[requestLen++] = 'u';
-	  requestBuffer[requestLen++] = busid;   // to device id
+	  requestBuffer[requestLen++] = busaddress.byte.LB;   // to device id
 	  requestBuffer[requestLen++] = (char) pct; // command char
 	  break;
 	} // end switch
@@ -1094,32 +1196,42 @@ void hue_dequeueExec( void)
 		if	(huemqtt_direct)
 		{// ponte diretto hue -> mqtt
 			bus_scs_queue busdata;
-			busdata.busid = busid;
+			busdata.busaddress = busaddress.Val;
 			busdata.bustype = bustype;
 			busdata.busvalue = (char) pct; 
 			busdata.busfrom = 0;
 			busdata.busrequest = 0x12;
 			busdata.buscommand = command;
-//			printf("mqttr %02x t:%02x c:%02x v:%d\n",busid,bustype,command,(char)pct);
+//			printf("mqttr %02x t:%02x c:%02x v:%d\n",busaddress,bustype,command,(char)pct);
 			if	(huemqtt_direct == 1)
-				MQTTrequest(&busdata);
+			{
+				if (extended)
+					MQTTrequestExt(&busdata);
+				else
+					MQTTrequest(&busdata);
+			}
 			else
 			if	(huemqtt_direct == 2)
-				MQTTcommand(&busdata);
-		}
+			{
+				if (extended)
+					MQTTcommandExt(&busdata);
+				else
+					MQTTcommand(&busdata);
+			}
+			}
 
 	}
 }
 // ===================================================================================
 char I2Crequest(bus_scs_queue * busdata, char option)  // 1=answer ack      2=answer state      3=answer all
 {
-	int  busx = busdata->busid;
-	char busid = (busdata->busid) & 0x07;
+	int  busx = busdata->busaddress;
+	char busaddress = (busdata->busaddress) & 0x07;
 //	char command = busdata->buscommand;
 //	char bustype = busdata->bustype;
 //	char busvalue = busdata->busvalue;
 	char bValue = 1;
-	bValue<<=busid;		// indirizza bit a 1
+	bValue<<=busaddress;		// indirizza bit a 1
 
 	char i2cadr = (busdata->bustype) & 0x0F;
 	i2cx = (int)i2cadr;
@@ -1144,7 +1256,7 @@ char I2Crequest(bus_scs_queue * busdata, char option)  // 1=answer ack      2=an
 		requestBuffer[requestLen++] = '§';
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = 0xB8;   // to device id
-		requestBuffer[requestLen++] = busdata->busid;    // from device id
+		requestBuffer[requestLen++] = busdata->busaddress;    // from device id
 		requestBuffer[requestLen++] = 0x12;    // command
 		requestBuffer[requestLen++] = busdata->buscommand; // command char
 		write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
@@ -1181,7 +1293,7 @@ int main(int argc, char *argv[])
 
 	//	printf(CLR WHT BOLD UNDER PROGNAME BOLD VERSION NRM "\n");
 
-	printf(PROGNAME "\n");
+	printf(PROGNAME VERSION "\n");
 
 	if (parse_opts(argc, argv))
 		return 0;
@@ -1244,7 +1356,7 @@ int main(int argc, char *argv[])
 
 	char sbyte;
 	strcpy(filename,CONFIG_FILE);
-	for (int i=0; i<255; i++) 
+	for (int i=0; i<MAXDEV; i++) 
 	{
 		busdevType[i] = 0;
 		busdevState[i] = 1;
@@ -1261,9 +1373,9 @@ int main(int argc, char *argv[])
 		{
 			if (line[0] != '#')
 			{
-				char busid[8];
-				tcpJarg(line,"\"device\"",busid);
-				if (busid[0] != 0)  c++;
+				char busaddress[8];
+				tcpJarg(line,"\"device\"",busaddress);
+				if (busaddress[0] != 0)  c++;
 				if (immediatePicUpdate)
 				{
 					bufferPicLoad(line);
@@ -1332,7 +1444,7 @@ int main(int argc, char *argv[])
 			rx_len = 0;
 			rx_buffer[rx_len++] = sbyte;
 			rx_prefix = sbyte;
-		    if ((rx_prefix > 0xF0) && (rx_prefix < 0xF9))	// 0xf5 y aa bb cc dd
+		    if ((rx_prefix > 0xF0) && (rx_prefix < 0xFA))	// 0xf5 y aa bb cc dd
 			{
 				rx_internal = 1;
 				rx_max = (rx_prefix & 0x0F);
@@ -1352,25 +1464,36 @@ int main(int argc, char *argv[])
 			rx_internal = 9;
 			if (verbose) fprintf(stderr," %c msg\n",rx_buffer[1]);	// scrittura a video
 
+			WORD_VAL thisaddress;
 			bus_scs_queue _scsrx;
+
+//			thisaddress.byte.LB = rx_buffer[7];	// device
+			thisaddress.byte.HB = my_busid;	// origin bus id
+
 			_scsrx.busrequest = rx_buffer[4];
 
 			if (_scsrx.busrequest == 0x30)  // <-termostato----------------------------
 			{
  				if (rx_buffer[2] == 0xB4)
 				{
-				    _scsrx.busid = rx_buffer[3];	// device
+					thisaddress.byte.LB = rx_buffer[3];	// device
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+//				    _scsrx.busaddress = rx_buffer[3];	// device
 				    _scsrx.busfrom = rx_buffer[2];  // from
 
 					_scsrx.buscommand = 0;
-					_scsrx.bustype = busdevType[(int)_scsrx.busid];
+					_scsrx.bustype = busdevType[(int)_scsrx.busaddress];
 					if (_scsrx.bustype == 0) 
 					{
 						_scsrx.bustype = 0x0F;
-						busdevType[(int)_scsrx.busid] = _scsrx.bustype;
+						busdevType[(int)_scsrx.busaddress] = _scsrx.bustype;
 					}
 					_scsrx.busvalue = rx_buffer[5];
-					MQTTrequest(&_scsrx);
+					if (extended)
+						MQTTrequestExt(&_scsrx);
+					else
+						MQTTrequest(&_scsrx);
 				}
 			}
 			else
@@ -1378,32 +1501,152 @@ int main(int argc, char *argv[])
 			{
  				if (rx_buffer[2] < 0xB0)
 				{
-				    _scsrx.busid = rx_buffer[2];  // to
+					thisaddress.byte.LB = rx_buffer[2];	// device
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+//				    _scsrx.busaddress = rx_buffer[2];  // to
 				    _scsrx.busfrom = rx_buffer[3];  // from
 				}
 				else
  				if (rx_buffer[3] < 0xB0)
 				{
-				    _scsrx.busid = rx_buffer[3];  // from
+					thisaddress.byte.LB = rx_buffer[3];	// device
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+//				    _scsrx.busaddress = rx_buffer[3];  // from
 				    _scsrx.busfrom = rx_buffer[2];  // to
 				}
 				else
     // ================================ TRATTAMENTO COMANDI GLOBALI  ===========================================
  				if (rx_buffer[2] == 0xB1)
 				{
-				    _scsrx.busid = rx_buffer[2];  // to
+					thisaddress.byte.LB = rx_buffer[2];	// device
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+//				    _scsrx.busaddress = rx_buffer[2];  // to
 				    _scsrx.busfrom = rx_buffer[3];  // from
 				}
 				else
 	// ==========================================================================================================
 				{
-					_scsrx.busid = 0;
+					_scsrx.busaddress = 0;
 				    _scsrx.busfrom = 0;  // to
 				}
 
 				_scsrx.buscommand = rx_buffer[5];
-				_scsrx.bustype = busdevType[(int)_scsrx.busid];
-				_scsrx.busvalue = busdevHue [(int)_scsrx.busid];
+				_scsrx.bustype = busdevType[(int)_scsrx.busaddress];
+				_scsrx.busvalue = busdevHue [(int)_scsrx.busaddress];
+
+				if ((i2cgate) && (_scsrx.bustype >= 0x30) && (_scsrx.bustype <= 0x3F))
+				{	// comando rivolto a rele i2c
+					I2Crequest(&_scsrx,3);
+				}
+
+//				setState(unsigned char id, char state, unsigned char value) // non indispensabile -
+
+				if (extended)
+					MQTTrequestExt(&_scsrx);
+				else
+					MQTTrequest(&_scsrx);
+
+			}
+			else   // <-rx_buffer[4] != 0x12 
+			{		      
+    // ================================ TRATTAMENTO COMANDI GENERICI  ===========================================
+
+
+
+
+			}
+
+		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+// --------------------------------------------------extended commands----------------------------------------------------------------------
+
+		if ((rx_internal == 1) && (rx_buffer[1] == 'y') && ((rx_buffer[0] == 0xF9) && (rx_buffer[2] == 0xEC)))  
+		  //                                            0    1   2  3  4  5  6  7  8  9
+		{ // START pubblicazione stato device        [0xF9] [y] EC bb 00 00 dd ss 12 cc
+		  // START pubblicazione stato device        [0xF5] [y] 32 00 12 01
+			rx_internal = 9;
+			if (verbose) fprintf(stderr," %c msg\n",rx_buffer[1]);	// scrittura a video
+			WORD_VAL thisaddress;
+			bus_scs_queue _scsrx;
+			_scsrx.busrequest = rx_buffer[8];
+
+			if (_scsrx.busrequest == 0x30)  // <-termostato----------------------------
+			{
+ 				if (rx_buffer[6] == 0xB4)
+				{
+					thisaddress.byte.LB = rx_buffer[7];	// device
+					thisaddress.byte.HB = rx_buffer[4];	// origin bus id
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+
+				    _scsrx.busaddress = thisaddress.Val;// device
+				    _scsrx.busfrom = rx_buffer[6];  // from
+
+					_scsrx.buscommand = 0;
+					_scsrx.bustype = busdevType[(int)_scsrx.busaddress];
+					if (_scsrx.bustype == 0) 
+					{
+						_scsrx.bustype = 0x0F;
+						busdevType[(int)_scsrx.busaddress] = _scsrx.bustype;
+					}
+					_scsrx.busvalue = rx_buffer[9];
+					MQTTrequest(&_scsrx);
+				}
+			}
+			else
+			if (_scsrx.busrequest == 0x12)  // <-comando----------------------------
+			{
+ 				if (rx_buffer[6] < 0xB0)
+				{
+					thisaddress.byte.LB = rx_buffer[6];	// dest device
+					thisaddress.byte.HB = rx_buffer[3];	// dest bus id
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+				    _scsrx.busfrom = rx_buffer[7];  // from
+				}
+				else
+ 				if (rx_buffer[7] < 0xB0)
+				{
+					thisaddress.byte.LB = rx_buffer[7];	// from device
+					thisaddress.byte.HB = rx_buffer[4];	// from bus id
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+					_scsrx.busfrom = rx_buffer[6];  // to
+				}
+				else
+    // ================================ TRATTAMENTO COMANDI GLOBALI  ===========================================
+ 				if (rx_buffer[6] == 0xB1)
+				{
+					thisaddress.byte.LB = rx_buffer[6];	// dest device
+					thisaddress.byte.HB = rx_buffer[3];	// dest bus id
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+				    _scsrx.busfrom = rx_buffer[7];  // from
+				}
+				else
+	// ==========================================================================================================
+				{
+					_scsrx.busaddress = 0;
+				    _scsrx.busfrom = 0;  // to
+				}
+
+				_scsrx.buscommand = rx_buffer[9];
+				_scsrx.bustype = busdevType[(int)_scsrx.busaddress];
+				_scsrx.busvalue = busdevHue [(int)_scsrx.busaddress];
 
 				if ((i2cgate) && (_scsrx.bustype >= 0x30) && (_scsrx.bustype <= 0x3F))
 				{	// comando rivolto a rele i2c
@@ -1426,6 +1669,22 @@ int main(int argc, char *argv[])
 
 		}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 		if ((rx_internal == 1) && ((rx_buffer[1] == 'u') || (rx_buffer[1] == 'm')) && (rx_buffer[0] == 0xF3)) 
 		{ // START pubblicazione stato device        [0xF5] [y] 32 00 12 01
 			rx_internal = 9;
@@ -1433,14 +1692,14 @@ int main(int argc, char *argv[])
 
 			bus_scs_queue _scsrx;
 
-			_scsrx.busid = rx_buffer[2];
+			_scsrx.busaddress = rx_buffer[2];
 			_scsrx.busvalue = rx_buffer[3];
 			_scsrx.buscommand = 0x80;
 			_scsrx.busfrom = 0;
 			_scsrx.busrequest = rx_buffer[1];	// u
-			_scsrx.bustype = busdevType[(int)_scsrx.busid];
+			_scsrx.bustype = busdevType[(int)_scsrx.busaddress];
 
-			char hueid = busdevHue[(int)_scsrx.busid];
+			char hueid = busdevHue[(int)_scsrx.busaddress];
 
 			if (hueid != 0xff) 
 			{
@@ -1496,8 +1755,9 @@ int main(int argc, char *argv[])
 				{
 					if (scan & chgd)		// scan (00000001-10000000)/ ixd (0-7)     indicano un bit cambiato 
 					{
-						char busid = i2cInpBusAddress[ixpoll][ixd];
-						char bustyp = busdevType[(int)busid];
+						WORD_VAL busaddress;
+						busaddress.Val = i2cInpBusAddress[ixpoll][ixd];
+						char bustyp = busdevType[(int)busaddress.Val];
 						char command;
 						if (temp & scan)	// 1=contatto aperto   (off)
 							command = 1;
@@ -1513,26 +1773,9 @@ int main(int argc, char *argv[])
 //  scs:  0-1-2=pulsante      3-4-5=deviatore
 							if ((i2cswitch > 2) || (command == 0)) // se deviatore scambia sempre      se pulsante scambia solo su contatto chiuso
 							{
-								command = busdevState[(int)busid] ^ 1;
-								char requestBuffer[24];
-								int requestLen = 0;
-								requestBuffer[requestLen++] = '§';
-								requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
-								requestBuffer[requestLen++] = busid; // to   device
-								requestBuffer[requestLen++] = 0x01;   // from device
-								requestBuffer[requestLen++] = 0x12;   // type:command
-								requestBuffer[requestLen++] = command;// command
-								if (uartgate) write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
-								if (verbose)
-								{
-									printf("SCS cmd from i2c: %c %c ",requestBuffer[0],requestBuffer[1]);
-									for (int i=2;i<requestLen;i++)
-									{
-										printf("%02X ",requestBuffer[i]);
-									}
-									printf("\n");
-								}
-								busdevState[(int)busid] = command;
+								command = busdevState[(int)busaddress.Val] ^ 1;
+								uart_request(busaddress, 0x01, 0x12, command);
+								busdevState[(int)busaddress.Val] = command;
 							}
 						}
 						// se il tipo di indirizzo comandato è i2c (da 30 a 3F) genera il comando
@@ -1548,9 +1791,9 @@ int main(int argc, char *argv[])
 							{
 								if  ((i2cswitch == 1) || (i2cswitch == 4)						// se fisso agisce ma non scambia
 								|| (((i2cswitch == 2) || (i2cswitch == 3)) && (command == 0)))	// se deviatore scambia sempre      se pulsante scambia solo su contatto chiuso
-									command = busdevState[(int)busid] ^ 1;
+									command = busdevState[(int)busaddress.Val] ^ 1;
 								bus_scs_queue _i2ccmd;
-								_i2ccmd.busid = busid;
+								_i2ccmd.busaddress = busaddress.Val;
 								_i2ccmd.busfrom = 0;  
 								_i2ccmd.buscommand = command;
 								_i2ccmd.bustype = bustyp;

@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * ---------------------------------------------------------------------------*/
 #define PROGNAME "SCSLOG "
-#define VERSION  "1.00"
+#define VERSION  "1.04"
 
 #include <stdint.h>
 #include <unistd.h>
@@ -42,7 +42,35 @@
 		time_t	rawtime;
 struct	tm *	timeinfo;
 char	verbose = 0;
-char busdevType[256] = {0};
+// =============================================================================================
+  typedef union _INT_VAL
+  {
+    int  Val;
+//    uint32_t  Val;
+    char v[4];
+    struct
+    {
+        char LB;
+        char HB;
+        char UB;
+        char XB;
+    } byte;
+  } INT_VAL;
+// =============================================================================================
+  typedef union _WORD_VAL
+  {
+    uint16_t  Val;
+    char v[2];
+    struct
+    {
+        char LB;
+        char HB;
+    } byte;
+  } WORD_VAL;
+// =============================================================================================
+#define MAXDEV 2560
+// =============================================================================================
+char busdevType[MAXDEV] = {0};
 // =============================================================================================
 int		fduart = -1;
 struct termios tios_bak;
@@ -52,29 +80,31 @@ int    keepRunning = 1;
 FILE   *fConfig;
 char	filename[64];
 int  timeToClose = 0;
-char    rx_buffer[255];
+char    rx_buffer[256];
 int     rx_len;
 int     rx_max = 250;
+char	my_busid = 0;
+char	extended = 0;
 // =============================================================================================
 void rxBufferLoad(int tries);
-char aConvert(char * aData);
 void mSleep(int millisec);
+char axTOchar(char * aData);
 // =============================================================================================
-char aConvert(char * aData)
+char axTOchar(char * aData)
 {
 char *ptr;
 long ret;
     ret = strtoul(aData, &ptr, 16);
     return (char) ret;
 }
-// ===================================================================================
+// =============================================================================================
 
 
 
 
 
 
-// ===================================================================================
+// =============================================================================================
 void intHandler(int sig) {
 	(void) sig;
     keepRunning = 0;
@@ -110,9 +140,9 @@ void uSleep(int microsec) {
 // ===================================================================================
 static void print_usage(const char *prog)	// NOT USED
 {
-	printf("Usage: %s [-v]\n", prog);
-	puts("  -v --verbose \n"
-		 );
+	printf("Usage: %s [-v -ixx]\n", prog);
+	puts("  -v   --verbose \n");
+	puts("  -ixx --mybusid (xx) \n");
 	exit(1);
 }
 // ===================================================================================
@@ -128,11 +158,12 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 		static const struct option lopts[] = {
 //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
 			{ "verbose",    0, 0, 'v' },
+			{ "mybusid",    1, 0, 'i' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
-		c = getopt_long(argc, argv, "v h ", lopts, NULL);
+		c = getopt_long(argc, argv, "v i:h ", lopts, NULL);
 		if (c == -1)
 			return 0;
 
@@ -143,6 +174,12 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 		case 'v':
 			verbose=1;
 			printf("Verbose\n");
+			break;
+		case 'i':
+			if (optarg) 
+				my_busid=axTOchar(optarg);
+			printf("my bus id: 0x%X-\n",my_busid);
+//			i2cbase <<= 4; // da LB a HB
 			break;
 
 		case '?':
@@ -220,10 +257,11 @@ void writeFile(void)
 	  printf("\nfile open error...");
 	  exit(EXIT_FAILURE);
 	}
+	int i;
 
 	fprintf(fConfig,"{\"coverpct\":\"false\",\"devclear\":\"true\"}\n"); 
 
-	for (int i=0;i<255;i++)
+	for (i=0;i<MAXDEV;i++)
 	{
 		switch(busdevType[i])
 		{
@@ -244,6 +282,51 @@ void writeFile(void)
 			break;
 		case 15:
 			fprintf(fConfig,"{\"device\":\"%02X\",\"type\":\"15\",\"maxp\":\"\",\"descr\":\"termostato %02x\"}\n",i,i); 
+			break;
+		}
+	}
+	fclose(fConfig);
+	fConfig = NULL;
+}
+// ===================================================================================
+void writeFile2(void)
+{
+	strcpy(filename,"discovered");
+	fConfig = fopen(filename, "wb");
+	if (!fConfig)
+	{
+	  printf("\nfile open error...");
+	  exit(EXIT_FAILURE);
+	}
+	INT_VAL  busix;
+	busix.Val = 0;
+	INT_VAL i;
+
+	fprintf(fConfig,"{\"coverpct\":\"false\",\"devclear\":\"true\",\"extended\":\"true\",\"busid\":\"%02X\"}\n",my_busid); 
+
+	for (i.Val=0;i.Val<MAXDEV;i.Val++)
+	{
+		busix.byte.LB = i.byte.LB;
+		busix.byte.HB = i.byte.HB;
+		switch(busdevType[i.Val])
+		{
+				// 0x01:switch       0x03:dimmer   
+				// 0x08:tapparella   0x09:tapparella pct   
+				// 0x0B generic		 0x0C generic 
+				// 0x0E:allarme		 0x0F termostato
+				// 0x30-0x37:rele i2c
+				// 0x40-0x47:pulsanti i2c
+		case 1:
+			fprintf(fConfig,"{\"device\":\"%04X\",\"type\":\"1\",\"descr\":\"switch %04x\"}\n",busix.Val,busix.Val); 
+			break;
+		case 3:
+			fprintf(fConfig,"{\"device\":\"%04X\",\"type\":\"3\",\"descr\":\"dimmer %04x\"}\n",busix.Val,busix.Val); 
+			break;
+		case 8:
+			fprintf(fConfig,"{\"device\":\"%04X\",\"type\":\"8\",\"maxp\":\"\",\"descr\":\"tapparella %04x\"}\n",busix.Val,busix.Val); 
+			break;
+		case 15:
+			fprintf(fConfig,"{\"device\":\"%04X\",\"type\":\"15\",\"maxp\":\"\",\"descr\":\"termostato %04x\"}\n",busix.Val,busix.Val); 
 			break;
 		}
 	}
@@ -322,7 +405,7 @@ int main(int argc, char *argv[])
 	else
 		printf("write - OK\n");
 
-	for (int i=0; i<255; i++) 
+	for (int i=0; i<MAXDEV; i++) 
 	{
 		busdevType[i] = 0;
 	}
@@ -361,15 +444,56 @@ int main(int argc, char *argv[])
 				fprintf(stderr,"\n");	// scrittura a video
 			}
 
-			if (rx_len > 6) 
+			char busid;
+			char busrequest = 0xFF;
+			char buscommand = 0;
+			char busdevice = 0;
+			char busdestination = 0;
+			char devtype = 0;
+			INT_VAL  busix;
+			busix.Val = 0;
+
+			if ((rx_len > 6) && (rx_buffer[0] == 7) && (rx_buffer[1] == 0xA8))  
 			{
 // 07 A8 B8 31 12 01 9A A3
-				char busrequest = rx_buffer[4];
-//				char busto      = rx_buffer[2];
-//				char busfrom    = rx_buffer[3];
-				char buscommand = rx_buffer[5];
-				char busdevice = 0;
-				char devtype = 0;
+				busid = my_busid;
+				busdestination = rx_buffer[2];
+				busrequest = rx_buffer[4];
+				buscommand = rx_buffer[5];
+				if (rx_buffer[2] < 0xb0)
+					busdevice = rx_buffer[2];
+				else
+					busdevice = rx_buffer[3];
+				if (extended == 1)
+					extended = 0;
+			}
+			else
+			if ((rx_len > 10) && (rx_buffer[0] == 0x0B) && (rx_buffer[1] == 0xA8) && (rx_buffer[2] == 0xEC))  
+			{
+// 0B A8 EC 01 00 00 39 00 12 00 C6 A3
+// 0B A8 EC FF 01 F0 B8 39 12 00 71 A3
+				busdestination = rx_buffer[6];
+				if (rx_buffer[3] == 0xFF)
+					busid = rx_buffer[4];
+				else
+					busid = rx_buffer[3];
+
+				busrequest = rx_buffer[8];
+				buscommand = rx_buffer[9];
+				if (rx_buffer[6] < 0xb0)
+					busdevice = rx_buffer[6];
+				else
+					busdevice = rx_buffer[7];
+				if (extended == 0)
+					extended = 1;
+			}
+
+
+			if (busrequest != 0xFF) 
+			{
+				busix.byte.LB = busdevice;
+				if (busid > 10)  busid = 0;
+				busix.byte.HB = busid;
 
 				const char * type_descri[] =
 				{
@@ -397,19 +521,18 @@ int main(int argc, char *argv[])
 				// 0B generic    0C generic 
 				// 0E:allarme	 0F termostato
 
-				if (rx_buffer[2] < 0xb0)
-					busdevice = rx_buffer[2];
-				else
-					busdevice = rx_buffer[3];
 
-				if ((busrequest == 0x30) && (rx_buffer[2] == 0xB4))  // <-termostato----------------------------
+				if ((busrequest == 0x30) && (busdestination == 0xB4))  // <-termostato----------------------------
 				{
 					devtype = 0x0F;
 					busdevice = rx_buffer[3];
 				}
 				else
-				if ((busrequest == 0x12) && (rx_buffer[2] != 0xB1))
+				if ((busrequest == 0x12) && (busdestination != 0xB1))
 				{
+					if (extended == 1)
+						extended = 2;
+
 					if ((buscommand == 0x08) || (buscommand == 0x09) || (buscommand == 0x0A))	// tapparella
 						devtype = 8;
 					else
@@ -429,22 +552,33 @@ int main(int argc, char *argv[])
 						devtype = 3;
 				}
 
-				if ((devtype) && (busdevType[(int)busdevice] == 0))
+				if ((devtype) && (busdevType[busix.Val] == 0))
 				{
-					busdevType[(int)busdevice] = devtype;
-					printf(GRN BOLD "NUOVO -> [%02X] - tipo %02u -> %s " NRM "\n",busdevice, devtype, type_descri[(int)devtype]);
+					if (extended == 1)
+						extended = 2;
+					busdevType[busix.Val] = devtype;
+					if (extended == 2)
+						printf(GRN BOLD "NUOVO -> [%X][%02X] - tipo %02u -> %s " NRM "\n",busid, busdevice, devtype, type_descri[(int)devtype]);
+					else
+						printf(GRN BOLD "NUOVO -> [%02X] - tipo %02u -> %s " NRM "\n",busdevice, devtype, type_descri[(int)devtype]);
 				}
 				else
-				if ((devtype) && (busdevType[(int)busdevice] == 1) && (devtype == 3))
+				if ((devtype) && (busdevType[busix.Val] == 1) && (devtype == 3))
 				{
-					busdevType[(int)busdevice] = devtype;
-					printf(YEL BOLD "VARIATO -> [%02X] - tipo %02u -> %s " NRM "\n",busdevice, devtype, type_descri[(int)devtype]);
+					busdevType[busix.Val] = devtype;
+					if (extended == 2)
+						printf(YEL BOLD "VARIATO -> [%X][%02X] - tipo %02u -> %s " NRM "\n",busid, busdevice, devtype, type_descri[(int)devtype]);
+					else
+						printf(YEL BOLD "VARIATO -> [%02X] - tipo %02u -> %s " NRM "\n",busdevice, devtype, type_descri[(int)devtype]);
 				}
 				else
-				if ((devtype) && (busdevType[(int)busdevice] != devtype))
+				if ((devtype) && (busdevType[busix.Val] != devtype))
 				{
-					busdevType[(int)busdevice] = devtype;
-					printf(RED BOLD "INCOERENTE -> [%02X] - tipo %02u -> %s " NRM "\n",busdevice, devtype, type_descri[(int)devtype]);
+					busdevType[busix.Val] = devtype;
+					if (extended == 2)
+						printf(RED BOLD "INCOERENTE -> [%X][%02X] - tipo %02u -> %s " NRM "\n",busid, busdevice, devtype, type_descri[(int)devtype]);
+					else
+						printf(RED BOLD "INCOERENTE -> [%02X] - tipo %02u -> %s " NRM "\n",busdevice, devtype, type_descri[(int)devtype]);
 				}
 
 			}
@@ -454,7 +588,10 @@ int main(int argc, char *argv[])
 
   // Don't forget to clean up
 	close(fduart);
-	writeFile();
+	if (extended == 2)
+		writeFile2();
+	else
+		writeFile();
 	printf("end\n");
 	return 0;
 }

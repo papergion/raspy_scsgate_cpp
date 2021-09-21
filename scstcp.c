@@ -551,7 +551,7 @@ int getNextDevice(char * line)
 int HttpResponse(int connection, int retcode, const char * text)
 {
 	char httpData[1024];
-	sprintf(httpData,"HTTP/1.0 %03d OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s\n",retcode, strlen(text)+1,text);
+	sprintf(httpData,"HTTP/1.0 %03d OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s\n",retcode, (int)strlen(text)+1,text);
 	send(connection, httpData, sizeof(httpData), 0);
 	if (verbose) printf("====> reply: %s \n",httpData);
 	return 0;
