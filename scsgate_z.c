@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_Z "
-#define VERSION  "1.75"
+#define VERSION  "1.76"
 // =========================== GESTIONE IMPIANTI ESTESI ==============================
 // =========================== GESTIONE DEVICES FISICI LOCALI ========================
 // indirizzo i2c base specificato da optarg -Ixx  (default 30) - si considera solo HB
@@ -72,6 +72,7 @@ int		timeToexec = 0;
 int		timeTopoll = 0;
 char	immediatePicUpdate = 0;
 char	verbose = 0;	// 1=verbose     2=verbose+      3=debug
+char    dgenerici = 0;  // 1= ci sono dispositivi di tipo 11     2= ci sono dispositivi di tipo 12    3=entrambi
 // =============================================================================================
 static const char *serial0   = "/dev/serial0";	// gpio uart 1
 static const char *i2cdevice = "/dev/i2c-1";	// I2C bus
@@ -843,6 +844,8 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 		  devtype = aTOchar(stype);
 //	  devType[(int)device] = devtype;
 	  busdevType[devix] = devtype;
+	  if (devtype == 11) dgenerici |= 0x01;
+	  if (devtype == 12) dgenerici |= 0x02;
 
 	  char scmd[8];
 	  tcpJarg(decBuffer,"\"cmd\"",scmd);
@@ -1552,13 +1555,33 @@ int main(int argc, char *argv[])
 			}
 			else   // <-rx_buffer[4] != 0x12 
 			{		      
-    // ================================ TRATTAMENTO COMANDI GENERICI  ===========================================
+    // ================================ TRATTAMENTO DISPOSITIVI GENERICI  ===========================================
 
+				thisaddress.byte.LB = rx_buffer[2];	// device to
+				if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+			    _scsrx.busaddress = thisaddress.Val;// device
 
-
-
+				_scsrx.busfrom = rx_buffer[3]; // from
+				_scsrx.buscommand = rx_buffer[5];
+				_scsrx.bustype = busdevType[(int)thisaddress.Val];
+				if (_scsrx.bustype == 11) 
+				{
+					if (extended)
+						MQTTrequestExt(&_scsrx);
+					else
+						MQTTrequest(&_scsrx);
+				}
+				thisaddress.byte.LB = rx_buffer[3];	// device from
+				if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				_scsrx.bustype = busdevType[(int)thisaddress.Val];
+				if (_scsrx.bustype == 12) 
+				{
+					if (extended)
+						MQTTrequestExt(&_scsrx);
+					else
+						MQTTrequest(&_scsrx);
+				}
 			}
-
 		}
 
 
@@ -1660,11 +1683,28 @@ int main(int argc, char *argv[])
 			}
 			else   // <-rx_buffer[4] != 0x12 
 			{		      
-    // ================================ TRATTAMENTO COMANDI GENERICI  ===========================================
+    // ================================ TRATTAMENTO DISPOSITIVI GENERICI  ===========================================
 
+				thisaddress.byte.LB = rx_buffer[6];	// dest device
+				thisaddress.byte.HB = rx_buffer[3];	// dest bus id
+				if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+			    _scsrx.busaddress = thisaddress.Val;// device
+			    _scsrx.busfrom = rx_buffer[7];  // from
+				_scsrx.buscommand = rx_buffer[9];
+				_scsrx.bustype = busdevType[(int)thisaddress.Val];
+				_scsrx.busvalue = busdevHue [(int)thisaddress.Val];
 
-
-
+				if (_scsrx.bustype == 11) 
+				{
+					MQTTrequest(&_scsrx);
+				}
+				thisaddress.byte.LB = rx_buffer[7];	// from device
+				if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				_scsrx.bustype = busdevType[(int)thisaddress.Val];
+				if (_scsrx.bustype == 12) 
+				{
+					MQTTrequest(&_scsrx);
+				}
 			}
 
 		}

@@ -413,7 +413,8 @@ int main(int argc, char *argv[])
 // =====================================================================================================
 void MsgPrepareFirmware(char len, char * buffer, char log)
 {
-	write(fduart,buffer,(int)len);			// scrittura su scsgate
+	int r = write(fduart,buffer,(int)len);			// scrittura su scsgate
+(void) r;
 	if (log)
 	{
 	  LogBufferTx(buffer,len);
@@ -430,7 +431,8 @@ void  MsgPrepareQuery(char log)	// cmd_sys 0x10
     requestBuffer[requestLen++] = 'Q';
     requestBuffer[requestLen++] = 'Q';
 //    requestBuffer[requestLen++] = 0x11; // prg request
-	write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
+	int r = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
+(void) r;
 
 	if (log)
 	{
@@ -450,7 +452,9 @@ char PicProg(void)
    char crcdep;
    char crcseq;
    int  crcChk;
-   
+   int rc;
+   (void) rc;
+
 //======================================================================================================
    switch (sm_picprog)
    {
@@ -549,12 +553,15 @@ char PicProg(void)
 
 //------------------------------------------------------
     case PICPROG_REQUEST_OK:
-	  l = fread(&prog_file_data[0], sizeof(unsigned char), PICBUF, picFw);
+	  rc = fread(&prog_file_data[0], sizeof(unsigned char), PICBUF, picFw);
       sm_picprog = PICPROG_FLASH_BLOCK_START;
+	  l = 0;
       while (l < PICBUF)
       {
          prog_file_data[l++] = 0xFF;
       }
+      sm_picprog = PICPROG_FLASH_BLOCK_START; 
+	  break;
 
 //------------------------------------------------------
     case PICPROG_FLASH_BLOCK_START:

@@ -31,6 +31,7 @@ build:
 	$(CC) $(CFLAGS) $(INC) scsfirmware.c  -o $(TARGETDIR)/$(call MakeExe,scsfirmware) $(LIB)
 	$(CC) $(CFLAGS) $(INC) scsgate_x.c scs_mqtt.c scs_hue.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsgate_x) $(LIB)
 	$(CC) $(CFLAGS) $(INC) scsgate_y.c scs_mqtt_y.c scs_hue.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsgate_y) $(LIB)
+	$(CC) $(CFLAGS) $(INC) scsgate_z.c scs_mqtt_z.c scs_hue_z.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsgate_z) $(LIB)
 	$(CC) $(CFLAGS) $(INC) scsdiscover.c scs_mqtt_disc.c -lpaho-mqtt3c -o $(TARGETDIR)/$(call MakeExe,scsdiscover) $(LIB)
 
 template:

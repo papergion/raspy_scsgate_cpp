@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_X "
-#define VERSION  "1.63"
+#define VERSION  "1.64"
 //#define KEYBOARD
 
 // =============================================================================================
@@ -55,6 +55,7 @@ struct	tm *	timeinfo;
 int		timeToexec = 0;
 char	immediatePicUpdate = 0;
 char	verbose = 0;	// 1=verbose     2=verbose+      3=debug
+char    dgenerici = 0;  // 1= ci sono dispositivi di tipo 11     2= ci sono dispositivi di tipo 12    3=entrambi
 // =============================================================================================
 char    huegate = 0;		// simulazione hue gate per alexa
 char    mqttgate = 0;		// connessione in/out a broker mqtt
@@ -586,7 +587,8 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 	  tcpJarg(decBuffer,"\"type\"",stype);
 	  devtype = aTOchar(stype);
 	  busdevType[(int)device] = devtype;
-
+	  if (devtype == 11) dgenerici |= 0x01;
+	  if (devtype == 12) dgenerici |= 0x02;
 	  printf("device %2X tipo %02u - %s \n",device,devtype,alexadescr);
 
 	  if ((hueaction) && (devtype < 11))		// w6 - alexa non ha bisogno dei types 0x0B 0x0C (11-12) 0x0E 0x0F 0x12 0x13 (18 19)
@@ -871,7 +873,7 @@ int main(int argc, char *argv[])
 
 	//	printf(CLR WHT BOLD UNDER PROGNAME BOLD VERSION NRM "\n");
 
-	printf(PROGNAME "\n");
+	printf(PROGNAME VERSION "\n");
 
 	if (parse_opts(argc, argv))
 		return 0;
@@ -1067,13 +1069,22 @@ int main(int argc, char *argv[])
 			}
 			else   // <-rx_buffer[4] != 0x12 
 			{		      
-    // ================================ TRATTAMENTO COMANDI GENERICI  ===========================================
+    // ================================ TRATTAMENTO DISPOSITIVI GENERICI  ===========================================
 
-
-
-
+				_scsrx.busid = rx_buffer[2];   // to
+				_scsrx.busfrom = rx_buffer[3]; // from
+				_scsrx.buscommand = rx_buffer[5];
+				_scsrx.bustype = busdevType[(int)_scsrx.busid];
+				if (_scsrx.bustype == 11) 
+				{
+					MQTTrequest(&_scsrx);
+				}
+				_scsrx.bustype = busdevType[(int)_scsrx.busfrom];
+				if (_scsrx.bustype == 12) 
+				{
+					MQTTrequest(&_scsrx);
+				}
 			}
-
 		}
 
 		if ((rx_internal == 1) && ((rx_buffer[1] == 'u') || (rx_buffer[1] == 'm')) && (rx_buffer[0] == 0xF3)) 
