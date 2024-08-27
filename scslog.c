@@ -41,36 +41,36 @@
 // =============================================================================================
 		time_t	rawtime;
 struct	tm *	timeinfo;
-char	verbose = 0;
+uint8_t	verbose = 0;
 // =============================================================================================
   typedef union _INT_VAL
   {
     int  Val;
 //    uint32_t  Val;
-    char v[4];
+    uint8_t v[4];
     struct
     {
-        char LB;
-        char HB;
-        char UB;
-        char XB;
+        uint8_t LB;
+        uint8_t HB;
+        uint8_t UB;
+        uint8_t XB;
     } byte;
   } INT_VAL;
 // =============================================================================================
   typedef union _WORD_VAL
   {
     uint16_t  Val;
-    char v[2];
+    uint8_t v[2];
     struct
     {
-        char LB;
-        char HB;
+        uint8_t LB;
+        uint8_t HB;
     } byte;
   } WORD_VAL;
 // =============================================================================================
 #define MAXDEV 2560
 // =============================================================================================
-char busdevType[MAXDEV] = {0};
+uint8_t busdevType[MAXDEV] = {0};
 // =============================================================================================
 int		fduart = -1;
 struct termios tios_bak;
@@ -80,22 +80,22 @@ int    keepRunning = 1;
 FILE   *fConfig;
 char	filename[64];
 int  timeToClose = 0;
-char    rx_buffer[256];
+uint8_t    rx_buffer[256];
 int     rx_len;
 int     rx_max = 250;
-char	my_busid = 0;
-char	extended = 0;
+uint8_t	my_busid = 0;
+uint8_t	extended = 0;
 // =============================================================================================
 void rxBufferLoad(int tries);
 void mSleep(int millisec);
-char axTOchar(char * aData);
+uint8_t axTOchar(char * aData);
 // =============================================================================================
-char axTOchar(char * aData)
+uint8_t axTOchar(char * aData)
 {
 char *ptr;
 long ret;
     ret = strtoul(aData, &ptr, 16);
-    return (char) ret;
+    return (uint8_t) ret;
 }
 // =============================================================================================
 
@@ -146,7 +146,7 @@ static void print_usage(const char *prog)	// NOT USED
 	exit(1);
 }
 // ===================================================================================
-static char parse_opts(int argc, char *argv[])	// NOT USED
+static uint8_t parse_opts(int argc, char *argv[])	// NOT USED
 {
 	if ((argc < 1) || (argc > 3))
 	{
@@ -199,7 +199,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 // ===================================================================================
 int setFirst(void)
 {
-  char requestBuffer[24];
+  uint8_t requestBuffer[24];
   int requestLen = 0;
   int n;
 
@@ -338,7 +338,7 @@ void rxBufferLoad(int tries)
 {
 	int r;
 	int loop = 0;
-	char sbyte;
+	uint8_t sbyte;
 	rx_len = 0;
     while ((rx_len < rx_max) && (loop < tries))
     {
@@ -444,12 +444,12 @@ int main(int argc, char *argv[])
 				fprintf(stderr,"\n");	// scrittura a video
 			}
 
-			char busid;
-			char busrequest = 0xFF;
-			char buscommand = 0;
-			char busdevice = 0;
-			char busdestination = 0;
-			char devtype = 0;
+			uint8_t busid;
+			uint8_t busrequest = 0xFF;
+			uint8_t buscommand = 0;
+			uint8_t busdevice = 0;
+			uint8_t busdestination = 0;
+			uint8_t devtype = 0;
 			INT_VAL  busix;
 			busix.Val = 0;
 

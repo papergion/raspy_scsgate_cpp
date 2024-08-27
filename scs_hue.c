@@ -192,7 +192,7 @@ void tryMyIp(void)
 }
 // ===================================================================================
 void setState(char id, char state, char value) {
-  if (id < _devices.size()) {
+  if ((long unsigned int)id < _devices.size()) {
     if (state != 0xFF) _devices[(int)id].state = state;
     if (value)         _devices[(int)id].value = value;
 	cache_state = _devices[(int)id].state;
