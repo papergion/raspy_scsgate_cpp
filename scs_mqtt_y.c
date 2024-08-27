@@ -647,6 +647,8 @@ char MQTTrequest(bus_scs_queue * busdata)
 				pct *= 255;      // da 0 a 25500
 				pct /= 100;      // da 0 a 100
 				action = (char) pct;
+				strcpy(topic, BRIGHT_STATE);
+				sprintf(payload, "%03u", pct);     // position
 			}
 			break;
 		}
@@ -809,6 +811,8 @@ char MQTTcommand(bus_scs_queue * busdata)
 				pct *= 255;      // da 0 a 25500
 				pct /= 100;      // da 0 a 100
 				action = (char) pct;
+				strcpy(topic, BRIGHT_STATE);
+				sprintf(payload, "%03u", pct);     // position
 			}
 			break;
 		}
