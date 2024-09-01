@@ -50,12 +50,12 @@ typedef struct {
 // =============================================================================================
 typedef struct {
     uint16_t busaddress;
-    char bustype;
-    char buscommand;
-    char busvalue;
-    char busfrom;
-    char busrequest;
-    char fill_1;
+    unsigned char bustype;
+    unsigned char buscommand;
+    unsigned char busvalue;
+    unsigned char busfrom;
+    unsigned char busrequest;
+    unsigned char fill_1;
 } bus_scs_queue;
 // =============================================================================================
 int MQTTconnect(char * broker, char * user, char * password, char verbose);

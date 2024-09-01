@@ -271,7 +271,7 @@ int processMessage(char * topicName, char * payLoad)
   if ((reply == 1) && (device != 0) && (devtype != 0))
   { // device valido 
 	  strcat(to_publish.topic, dev);
-	  if (mqVerbose) 	fprintf(stderr,"pub schedule\n");
+	  if (mqVerbose) 	fprintf(stderr,"pub schedule %s %s\n",to_publish.topic,to_publish.payload);
 	  to_publish.retain = 1;
 	  _publish_b.push_back(to_publish);
   }       // device valido
@@ -514,9 +514,9 @@ char MQTTrequest(bus_scs_queue * busdata)
 	if (mqttopen != 3)	return 0xFF;
 
  // START pubblicazione stato device        [0xF5] [y] 32 00 12 01
-	char device = 0;
-	char devtype = 0;
-	char action;
+	unsigned char device = 0;
+	unsigned char devtype = 0;
+	unsigned char action;
 	char topic[32];
 	char payload[64];
 	char nomeDevice[4];
@@ -526,7 +526,7 @@ char MQTTrequest(bus_scs_queue * busdata)
 
 	sprintf(nomeDevice, "%02X", device);  // to
 
-	printf("MQTTR %02x t:%02x c:%02x v:%d\n",busdata->busid,busdata->bustype,busdata->buscommand,busdata->busvalue);
+	fprintf(stderr,"MQTTR id:%02x type:%02x cmd:%02x val:%d\n",busdata->busid,busdata->bustype,busdata->buscommand,busdata->busvalue);
 
 
 // ================================ INTERPRETAZIONE STATO ===========================================
@@ -579,6 +579,7 @@ char MQTTrequest(bus_scs_queue * busdata)
 		printf("%s -> %s\n",topic,payload);
     }
 	else
+/*
 	if ((busdata->bustype == 3) && (action > 0x7F))
 	{
 // ---------------------u-posizione tapparelle o dimmer %---------------------------------------------------------------------
@@ -591,7 +592,7 @@ char MQTTrequest(bus_scs_queue * busdata)
 		printf("%s -> %s\n",topic,payload);
     }
 	else
-
+*/
 	if (busdata->busrequest == 0x12)  // <-comando----------------------------
 	// SCS ridotto [0xF5] [y] 32 00 12 01
 	{
@@ -743,6 +744,7 @@ char MQTTcommand(bus_scs_queue * busdata)
 		printf("%s -> %s\n",topic,payload);
     }
 	else
+/*
 	if ((busdata->bustype == 3) && (action > 0x7F))
 	{
 // ---------------------u-posizione tapparelle o dimmer %---------------------------------------------------------------------
@@ -755,7 +757,7 @@ char MQTTcommand(bus_scs_queue * busdata)
 		printf("%s -> %s\n",topic,payload);
     }
 	else
-
+*/
 	if (busdata->busrequest == 0x12)  // <-comando----------------------------
 	// SCS ridotto [0xF5] [y] 32 00 12 01
 	{

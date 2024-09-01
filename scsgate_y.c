@@ -983,8 +983,8 @@ void hue_dequeueExec( void)
 
 		// trasformare da % a 1D-9D <--------------------------------------------------------------
 		pct = pctvalue;    // percentuale da 0 a 100
-//		pct *= 100;                  // da 0 a 25500
-//		pct /= 255;                  // da 0 a 100
+		pct *= 100;                  // da 0 a 25500
+		pct /= 255;                  // da 0 a 100
 		pct += 5;                    // arrotondamento
 		pct /= 10;                   // 0-10
 		if (pct > 9) pct = 9;

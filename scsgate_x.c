@@ -605,6 +605,7 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 void mqtt_dequeueExec( void)
 {
 	int  m = 0; // _schedule.begin();
+	int  pct;
 	char busid = _schedule_b[m].busid;
 	char bustype = busdevType[(int)busid];
 	if (bustype == 0) 
@@ -631,6 +632,36 @@ void mqtt_dequeueExec( void)
 	  requestBuffer[requestLen++] = busid; // to   device
 	  requestBuffer[requestLen++] = value;	// %
 	}
+
+	else
+	if ((command == 0xFF) && (busid != 0) && (bustype == 3))
+	{
+		  requestBuffer[requestLen++] = '§';
+		  requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
+		  requestBuffer[requestLen++] = busid; // to   device
+		  requestBuffer[requestLen++] = from;   // from device
+		  requestBuffer[requestLen++] = request;   // type:command
+//		  requestBuffer[requestLen++] = command;// command
+//			da value 01-99  a valori 1D---9D
+
+		  // su HA la percentuale e' 0-255
+		pct = value;    // percentuale da 0 a 100
+		pct *= 100;                  // da 0 a 25500
+		pct /= 255;                  // da 0 a 100
+		pct += 5;
+		pct /=10;					// da 0 a 10
+
+//	    value += 5;                    // arrotondamento
+//      value /= 10;                   // 0-10
+		value = pct;
+
+		if (value > 9) value = 9;
+        if (value == 0) value = 1;		    // 1-9
+        value *= 16;                   // hex high nibble
+	    requestBuffer[requestLen++] = 0x0D | (unsigned char) value;// command
+	}
+	else
+
 	if ((command != 0xFF) && (busid != 0) && (bustype != 0))
 	{
 	//    if (devtype != 11)	// <====================not GENERIC=======================
@@ -722,9 +753,10 @@ void hue_dequeueExec( void)
 		setState(hueid, 1, huevalue);
 
 		// trasformare da % a 1D-9D <--------------------------------------------------------------
+		// su HA la percentuale e' 0-255
 		pct = pctvalue;    // percentuale da 0 a 100
-//		pct *= 100;                  // da 0 a 25500
-//		pct /= 255;                  // da 0 a 100
+		pct *= 100;                  // da 0 a 25500
+		pct /= 255;                  // da 0 a 100
 		pct += 5;                    // arrotondamento
 		pct /= 10;                   // 0-10
 		if (pct > 9) pct = 9;
@@ -1007,7 +1039,7 @@ int main(int argc, char *argv[])
 		if ((rx_internal == 1) && (rx_buffer[1] == 'y') && ((rx_buffer[0] == 0xF5) || (rx_buffer[0] == 0xF6)))   
 		{ // START pubblicazione stato device        [0xF5] [y] 32 00 12 01
 			rx_internal = 9;
-			if (verbose) fprintf(stderr," %c msg\n",rx_buffer[1]);	// scrittura a video
+			if (verbose) fprintf(stderr," %c msg\n",rx_buffer[1]);	// scrittura a video   - y msg
 
 			bus_scs_queue _scsrx;
 			_scsrx.busrequest = rx_buffer[4];

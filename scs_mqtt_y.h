@@ -49,12 +49,12 @@ typedef struct {
 } publish_queue;
 // =============================================================================================
 typedef struct {
-    char busid;
-    char bustype;
-    char buscommand;
-    char busvalue;
-    char busfrom;
-    char busrequest;
+    unsigned char busid;
+    unsigned char bustype;
+    unsigned char buscommand;
+    unsigned char busvalue;
+    unsigned char busfrom;
+    unsigned char busrequest;
 } bus_scs_queue;
 // =============================================================================================
 int MQTTconnect(char * broker, char * user, char * password, char verbose);

@@ -249,13 +249,17 @@ int processMessage(char * topicName, char * payLoad)
   }
 
   // ----------------------------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
   if ((reply == 1) && (device != 0) && (devtype != 0))
   { // device valido 
 	  strcat(to_publish.topic, dev);
-	  if (mqVerbose) 	fprintf(stderr,"pub schedule\n");
+	  if (mqVerbose) 	fprintf(stderr,"pub schedule %s %s\n",to_publish.topic,to_publish.payload);
 	  to_publish.retain = 1;
 	  _publish_b.push_back(to_publish);
   }       // device valido
+  // ----------------------------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------------------------
   // ----------------------------------------------------------------------------------------------
 
   if ((device != 0) && (devtype != 0))
@@ -492,9 +496,9 @@ char MQTTrequest(bus_scs_queue * busdata)
 	if (mqttopen != 3)	return 0xFF;
 
  // START pubblicazione stato device        [0xF5] [y] 32 00 12 01
-	char device = 0;
-	char devtype = 0;
-	char action;
+	unsigned char device = 0;
+	unsigned char devtype = 0;
+	unsigned char action;
 	char topic[32];
 	char payload[64];
 	char nomeDevice[4];
@@ -504,7 +508,7 @@ char MQTTrequest(bus_scs_queue * busdata)
 
 	sprintf(nomeDevice, "%02X", device);  // to
 
-	fprintf(stderr,"MQTTR %02x t:%02x c:%02x v:%d\n",busdata->busid,busdata->bustype,busdata->buscommand,busdata->busvalue);
+	fprintf(stderr,"MQTTR id:%02x type:%02x cmd:%02x val:%d\n",busdata->busid,busdata->bustype,busdata->buscommand,busdata->busvalue);
 
 
 // ================================ INTERPRETAZIONE STATO ===========================================
@@ -521,6 +525,7 @@ char MQTTrequest(bus_scs_queue * busdata)
 		payload[2]= ',';		// virtual decimal point
 		publish(topic, payload, 1);
 		fprintf(stderr,"%s -> %s\n",topic,payload);
+		fprintf(stderr,"termostato");
 	}
 	else
   // ----------------------------------pubblicazione stati GENERIC device SCS (to & from)------------------------
@@ -532,6 +537,7 @@ char MQTTrequest(bus_scs_queue * busdata)
       	sprintf(payload, "%02X%02X%02X", busdata->busfrom, busdata->busrequest, busdata->buscommand);
 		publish(topic, payload, 1);
 		fprintf(stderr,"%s -> %s\n",topic,payload);
+		fprintf(stderr,"generic to");
 	}
 	else
 	if (busdata->bustype == 12)  
@@ -543,6 +549,7 @@ char MQTTrequest(bus_scs_queue * busdata)
 		sprintf(payload, "%02X%02X%02X", busdata->busid, busdata->busrequest, busdata->buscommand);
 		publish(topic, payload, 1);
 		fprintf(stderr,"%s -> %s\n",topic,payload);
+		fprintf(stderr,"generic from");
     }
 	else
 	if ((busdata->bustype == 9) && (action > 0x7F))
@@ -555,8 +562,10 @@ char MQTTrequest(bus_scs_queue * busdata)
 		strcat(topic, nomeDevice);
 		publish(topic, payload, 1);
 		fprintf(stderr,"%s -> %s\n",topic,payload);
+		fprintf(stderr,"tapparelle");
     }
 	else
+/*
 	if ((busdata->bustype == 3) && (action > 0x7F))
 	{
 // ---------------------u-posizione tapparelle o dimmer %---------------------------------------------------------------------
@@ -567,9 +576,10 @@ char MQTTrequest(bus_scs_queue * busdata)
 		strcat(topic, nomeDevice);
 		publish(topic, payload, 1);
 		fprintf(stderr,"%s -> %s\n",topic,payload);
+		fprintf(stderr,"dimmer?");
     }
 	else
-
+*/
 	if (busdata->busrequest == 0x12)  // <-comando----------------------------
 	// SCS ridotto [0xF5] [y] 32 00 12 01
 	{
@@ -617,10 +627,11 @@ char MQTTrequest(bus_scs_queue * busdata)
 		  default:
 			if ((action & 0x0F) == 0x0D) // da 0x1D a 0x9D
 			{
+				fprintf(stderr,"dimmer");
 				devtype = 3;
 				action >>= 4;
 				action *= 10;	// percentuale 10-90
-
+// su HA la percentuale e' 0-255
 				int pct = action;
 				pct *= 255;      // da 0 a 25500
 				pct /= 100;      // da 0 a 100
@@ -721,6 +732,7 @@ char MQTTcommand(bus_scs_queue * busdata)
 		fprintf(stderr,"%s -> %s\n",topic,payload);
     }
 	else
+/*
 	if ((busdata->bustype == 3) && (action > 0x7F))
 	{
 // ---------------------u-posizione tapparelle o dimmer %---------------------------------------------------------------------
@@ -733,7 +745,7 @@ char MQTTcommand(bus_scs_queue * busdata)
 		fprintf(stderr,"%s -> %s\n",topic,payload);
     }
 	else
-
+*/
 	if (busdata->busrequest == 0x12)  // <-comando----------------------------
 	// SCS ridotto [0xF5] [y] 32 00 12 01
 	{
@@ -784,7 +796,7 @@ char MQTTcommand(bus_scs_queue * busdata)
 				devtype = 3;
 				action >>= 4;
 				action *= 10;	// percentuale 10-90
-
+// su HA la percentuale e' 0-255
 				int pct = action;
 				pct *= 255;      // da 0 a 25500
 				pct /= 100;      // da 0 a 100
