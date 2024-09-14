@@ -1065,6 +1065,13 @@ int main(int argc, char *argv[])
 			else
 			if (_scsrx.busrequest == 0x12)  // <-comando----------------------------
 			{
+    // ================================ TRATTAMENTO COMANDI GLOBALI  ===========================================
+ 				if (rx_buffer[2] == 0xB1)
+				{
+				    _scsrx.busid = rx_buffer[2];  // to
+				    _scsrx.busfrom = rx_buffer[3];  // from
+				}
+				else
  				if (rx_buffer[2] < 0xB0)
 				{
 				    _scsrx.busid = rx_buffer[2];  // to
@@ -1075,13 +1082,6 @@ int main(int argc, char *argv[])
 				{
 				    _scsrx.busid = rx_buffer[3];  // from
 				    _scsrx.busfrom = rx_buffer[2];  // to
-				}
-				else
-    // ================================ TRATTAMENTO COMANDI GLOBALI  ===========================================
- 				if (rx_buffer[2] == 0xB1)
-				{
-				    _scsrx.busid = rx_buffer[2];  // to
-				    _scsrx.busfrom = rx_buffer[3];  // from
 				}
 				else
 	// ==========================================================================================================

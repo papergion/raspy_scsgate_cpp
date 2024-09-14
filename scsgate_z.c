@@ -1502,6 +1502,17 @@ int main(int argc, char *argv[])
 			else
 			if (_scsrx.busrequest == 0x12)  // <-comando----------------------------
 			{
+    // ================================ TRATTAMENTO COMANDI GLOBALI  ===========================================
+ 				if (rx_buffer[2] == 0xB1)
+				{
+					thisaddress.byte.LB = rx_buffer[2];	// device
+					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
+				    _scsrx.busaddress = thisaddress.Val;// device
+//				    _scsrx.busaddress = rx_buffer[2];  // to
+				    _scsrx.busfrom = rx_buffer[3];  // from
+				}
+				else
+	// ==========================================================================================================
  				if (rx_buffer[2] < 0xB0)
 				{
 					thisaddress.byte.LB = rx_buffer[2];	// device
@@ -1520,17 +1531,6 @@ int main(int argc, char *argv[])
 				    _scsrx.busfrom = rx_buffer[2];  // to
 				}
 				else
-    // ================================ TRATTAMENTO COMANDI GLOBALI  ===========================================
- 				if (rx_buffer[2] == 0xB1)
-				{
-					thisaddress.byte.LB = rx_buffer[2];	// device
-					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 
-				    _scsrx.busaddress = thisaddress.Val;// device
-//				    _scsrx.busaddress = rx_buffer[2];  // to
-				    _scsrx.busfrom = rx_buffer[3];  // from
-				}
-				else
-	// ==========================================================================================================
 				{
 					_scsrx.busaddress = 0;
 				    _scsrx.busfrom = 0;  // to
