@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_Z "
-#define VERSION  "1.76"
+#define VERSION  "1.77"
 // =========================== GESTIONE IMPIANTI ESTESI ==============================
 // =========================== GESTIONE DEVICES FISICI LOCALI ========================
 // indirizzo i2c base specificato da optarg -Ixx  (default 30) - si considera solo HB

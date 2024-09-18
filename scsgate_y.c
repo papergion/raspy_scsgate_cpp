@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_Y "
-#define VERSION  "1.64"
+#define VERSION  "1.65"
 // =========================== GESTIONE DEVICES FISICI LOCALI ========================
 // indirizzo i2c base specificato da optarg -Ixx  (default 30) - si considera solo HB
 // type da 0x30 a 0x3F corrispondono ad indirizzi di interfacce i2c di OUTPUT(si considera solo LB)
