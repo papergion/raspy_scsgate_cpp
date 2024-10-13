@@ -1,13 +1,16 @@
 ------------------------------------------------------------------
-instruction for installation / prerequisites:
+# instruction for installation / prerequisites:
 ------------------------------------------------------------------
-- GIT
+## GIT
 ------------------------------------------------------------------
-sudo apt-get update 
+```
+sudo apt-get update
 sudo apt-get install git
+```
 ------------------------------------------------------------------
-- PAHO
+## PAHO
 ------------------------------------------------------------------
+```
 cd $home
 mkdir mqttclients
 cd mqttclients
@@ -17,24 +20,32 @@ sudo apt-get install libssl-dev
 cd paho.mqtt.c
 sudo make		(can receive a lot of warning)
 sudo make install	(can receive an error)
+```
 ------------------------------------------------------------------
-- ASYNC folder
+## ASYNC folder
 ------------------------------------------------------------------
+```
 cd $home
 mkdir async
+```
 ------------------------------------------------------------------
-- MY_EASYSOCKET
+## EASYSOCKET
 ------------------------------------------------------------------
+```
 cd $home
 cd async
 git clone https://github.com/papergion/easysocket.git
 cd easysocket
 mv MakeHelper ..
+```
 ------------------------------------------------------------------
-- SCSGATE
+## SCSGATE
 ------------------------------------------------------------------
+```
 cd $home
 cd async
 git clone https://github.com/papergion/raspy_scsgate_cpp.git
 cd raspy_scsgate_cpp
-make	(executable in bin/release directory)
+make
+```
+   executable in bin/release directory
