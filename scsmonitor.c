@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * ---------------------------------------------------------------------------*/
 #define PROGNAME "SCSMONITOR "
-#define VERSION  "1.04"
+#define VERSION  "1.05"
 
 #include <stdint.h>
 #include <unistd.h>
@@ -45,6 +45,8 @@ char	pduFormat = 0;
 char	deviceFrom = 0;
 char	my_busid = 0;
 char	extended = 0;
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // =============================================================================================
 struct termios tios_bak;
 struct termios tios;
@@ -99,29 +101,32 @@ int getinNowait( void )
 // ===================================================================================
 static void print_usage(const char *prog)	// NOT USED
 {
-	printf("Usage: %s [-ixx]\n", prog);
-	puts("  -ixx --mybusid (xx) \n"
-		 );
+	printf("Usage: %s [-ixx N]\n", prog);
+	puts("  -ixx --mybusid (xx) \n" );
+	puts("  -N --uart dev name (/dev/serial0)\n");
 	exit(1);
 }
 // ===================================================================================
 static char parse_opts(int argc, char *argv[])	// NOT USED
 {
-	if ((argc < 1) || (argc > 2))
+	if ((argc < 1) || (argc > 3))
 	{
 		print_usage(PROGNAME);
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
 			{ "mybusid",    1, 0, 'i' },
+//			{ "speed",		2, 0, 'S' },
+			{ "uart_name",	1, 0, 'N' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
-		c = getopt_long(argc, argv, "i:h ", lopts, NULL);
+		c = getopt_long(argc, argv, "i:N:h ", lopts, NULL);
 		if (c == -1)
 			return 0;
 
@@ -135,6 +140,10 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 			printf("my bus id: 0x%X\n",my_busid);
 			extended = 1;
 //			i2cbase <<= 4; // da LB a HB
+			break;
+		case 'N': // uart name
+			if (optarg) 
+				strcpy(uartname, optarg);
 			break;
 
 		case '?':
@@ -178,11 +187,12 @@ int main(int argc, char *argv[])
 	printf("UART_Initialization\n");
 	int fd = -1;
 	
-	fd = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+//	fd = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+	fd = open(uartname, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
 	if (fd == -1) 
 	{
-		perror("open_port: Unable to open /dev/serial0 - ");
-		return(-1);
+		fprintf(stderr, "unable to open %s\n",uartname);
+        exit(EXIT_FAILURE);
 	}
 
 	struct termios options;

@@ -66,6 +66,8 @@ int	   fdUart;
 FILE   *fConfig;
 char	filename[64];
 int  timeToClose = 0;
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // =============================================================================================
   typedef union _WORD_VAL
   {
@@ -166,30 +168,35 @@ int getinNowait( void )
 // ===================================================================================
 static void print_usage(const char *prog)	// NOT USED
 {
-	printf("Usage: %s [-uv]\n", prog);
+	printf("Usage: %s [-uvN]\n", prog);
 	puts("  -u --picupdate  immediate update pic eeprom \n"
+//		 "  -S --uart speed (1-2-3) default 3\n"
+		 "  -N --uart dev name (/dev/serial0)\n"
 		 "  -v --verbose   \n");
 	exit(1);
 }
 // ===================================================================================
 static char parse_opts(int argc, char *argv[])	// NOT USED
 {
-	if ((argc < 1) || (argc > 3))
+	if ((argc < 1) || (argc > 4))
 	{
 		print_usage(PROGNAME);
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 			{ "picupdate",  0, 0, 'u' },
+//			{ "speed",		2, 0, 'S' },
+			{ "uart_name",	1, 0, 'N' },
 			{ "verbose",    0, 0, 'v' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "u v h", lopts, NULL);
+		c = getopt_long(argc, argv, "u v N::h", lopts, NULL);
 
 		if (c == -1)
 			return 0;
@@ -201,6 +208,10 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 		case 'u':
 			immediatePicUpdate = 1;
 			printf("Immediate pic update\n");
+			break;
+		case 'N': // uart name
+			if (optarg) 
+				strcpy(uartname, optarg);
 			break;
 		case 'v':
 			verbose=1;
@@ -277,10 +288,11 @@ void UART_start(void)
 	printf("UART_Initialization\n");
 	fdUart = -1;
 	
-	fdUart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
-	if (fdUart == -1) 
+//	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+	fduart = open(uartname, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+	if (fduart == -1) 
 	{
-		perror("open_port: Unable to open /dev/serial0 - ");
+		fprintf(stderr, "unable to open %s\n",uartname);
         exit(EXIT_FAILURE);
 	}
 

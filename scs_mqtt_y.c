@@ -693,9 +693,9 @@ char MQTTcommand(bus_scs_queue * busdata)
 	if (mqttopen != 3)	return 0xFF;
 
  // START pubblicazione comando device        [0xF5] [y] 32 00 12 01
-	char device = 0;
-	char devtype = 0;
-	char action;
+	unsigned char device = 0;
+	unsigned char devtype = 0;
+	unsigned char action;
 	char topic[32];
 	char payload[64];
 	char nomeDevice[4];

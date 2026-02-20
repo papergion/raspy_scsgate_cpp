@@ -264,7 +264,7 @@ int processMessage(char * topicName, char * payLoad)
 
   if ((device != 0) && (devtype != 0))
   {
-	// schedulare azione (_command) su devices (id)  con valore (value)
+	// schedulare richiesta (request) di azione (_command) su devices (id)  con valore (value)(se serve)
 	  bus_scs_queue schedule;
 
 	  schedule.busid = device;
@@ -683,7 +683,7 @@ char MQTTcommand(bus_scs_queue * busdata)
  // START pubblicazione comando device        [0xF5] [y] 32 00 12 01
 	char device = 0;
 	char devtype = 0;
-	char action;
+	unsigned char action;
 	char topic[32];
 	char payload[64];
 	char nomeDevice[4];

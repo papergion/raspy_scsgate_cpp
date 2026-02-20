@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSDISCOVER "
-#define VERSION  "1.20"
+#define VERSION  "1.21"
 //#define KEYBOARD
 
 // =============================================================================================
@@ -53,6 +53,8 @@ char	verbose = 0;	// 1=verbose     2=verbose+      3=debug
 char	mqttbroker[24] = {0};
 char	user[24] = {0};
 char	password[24] = {0};
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // =============================================================================================
 FILE   *fConfig;
 char	filename[64];
@@ -112,11 +114,13 @@ long ret;
 // ===================================================================================
 static void print_usage(const char *prog)	// NOT USED
 {
-	printf("Usage: %s [-vBUP]\n", prog);
+	printf("Usage: %s [-vBUPS]\n", prog);
 	puts("  -v --verbose 1/2/3  \n"
 		 "  -B --broker address  broker name/address:port (default localhost)\n"
 		 "  -U --broker username\n"
 		 "  -P --broker password\n"
+//		 "  -S --uart speed (1-2-3) default 3\n"
+//		 "  -N --uart dev name (/dev/serial0)\n"
 		 );
 	exit(1);
 }
@@ -129,6 +133,7 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
@@ -136,11 +141,13 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 			{ "broker",     2, 0, 'B' },
 			{ "user",       2, 0, 'U' },
 			{ "password",   2, 0, 'P' },
+//			{ "speed",		2, 0, 'S' },
+//			{ "uart_name",	1, 0, 'N' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
-		c = getopt_long(argc, argv, "uv::HB::U:P:DNh", lopts, NULL);
+		c = getopt_long(argc, argv, "uv::HB::U:P:Dh", lopts, NULL);
 		if (c == -1)
 			return 0;
 
@@ -170,6 +177,10 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 
 			printf("Verbose %d\n",verbose);
 			break;
+//		case 'N': // uart name
+//			if (optarg) 
+//				strcpy(uartname, optarg);
+//			break;
 
 		case '?':
             fprintf (stderr, "Unknown option `-%c'.\n", optopt);

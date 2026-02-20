@@ -2,7 +2,7 @@
  *  SCSFIRMWARE - download nuovo firmware su pic - input file .bin
  */
 #define PROGNAME "SCS_FIRMWARE "
-#define VERSION  "1.20"
+#define VERSION  "1.21"
 
 #include <stdint.h>
 #include <unistd.h>
@@ -42,11 +42,10 @@
 struct termios tios_bak;
 struct termios tios;
 int	   fduart = 0;
-char   force = 0;
 // =============================================================================================
   typedef union _WORD_VAL
   {
-    unsigned int  Val;
+    uint16_t  Val;
     char v[2];
     struct
     {
@@ -73,26 +72,30 @@ enum _PICPROG_SM
     PICPROG_ERROR
 } sm_picprog = PICPROG_FREE;
 // =============================================================================================
-char	sbyte;
-char    rx_prefix;
-char    rx_buffer[255];
+unsigned char	sbyte;
+unsigned char    rx_prefix;
+unsigned char    rx_buffer[255];
 int     rx_len;
 int     rx_max = 250;
-char    rx_internal;
+unsigned char    rx_internal;
 
 WORD_VAL prog_address;
 int     prog_error;
 int     prog_retry = 0;
 #define PICBUF 64
-char    prog_file_data[PICBUF];
+unsigned char    prog_file_data[PICBUF];
 FILE   *picFw;
 char	filename[64];
-char	ValidResponse;
+unsigned char	ValidResponse;
 int		fwTimeout;
 int		fwRetry;
+unsigned char	force = 0;
 // ===================================================================================
-char   verbose = 0;	
-char   prog_mode = 3;	// programmazione di prova
+unsigned char   verbose = 0;	
+unsigned char   prog_mode = 3;	// programmazione di prova
+// ===================================================================================
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // ===================================================================================
 void rxBufferLoad(int tries);
 char aConvert(char * aData);
@@ -113,30 +116,37 @@ long ret;
 // ===================================================================================
 static void print_usage(const char *prog)
 {
-	printf("Usage: %s [-fuv]\n", prog);
+	printf("Usage: %s [-fvNFu]\n", prog);
 	puts("  -f --file     firmware file name (bin)\n"
+		 "  -v --verbose \n"
+		 "  -N --uart dev name (/dev/serial0)\n"
+		 "  -F --force    unresponsive firmware\n"
 		 "  -u --update   true firmware update\n");
+
 	exit(1);
 }
 // ===================================================================================
 static char parse_opts(int argc, char *argv[])
 {
-	if ((argc < 2) || (argc > 4))
+	if ((argc < 2) || (argc > 7))
 	{
 		print_usage(PROGNAME);
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 			{ "file",      1, 0, 'f' },
-			{ "update",    2, 0, 'u' },
+			{ "update",    0, 0, 'u' },
 			{ "verbose",   0, 0, 'v' },
+			{ "uart_name", 1, 0, 'N' },
+			{ "force",     0, 0, 'F' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "D:f:u::v ", lopts, NULL);
+		c = getopt_long(argc, argv, "f:uvN:F ", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -159,7 +169,10 @@ static char parse_opts(int argc, char *argv[])
 		case ':':
 			printf("Option -%c requires a value.\n", optopt);
 			return 1;		
-
+		case 'N': // uart name
+			if (optarg) 
+				strcpy(uartname, optarg);
+			break;
 		case '?':
 			if ((optopt == 'D') || (optopt == 'f'))
 				fprintf (stderr, "Option -%c requires an argument.\n", optopt);
@@ -180,10 +193,11 @@ void UART_start(void)
 	printf("UART_Initialization\n");
 	fduart = -1;
 	
-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+//	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+	fduart = open(uartname, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
 	if (fduart == -1) 
 	{
-		perror("open_port: Unable to open /dev/serial0 - ");
+		fprintf(stderr, "unable to open %s\n",uartname);
         exit(EXIT_FAILURE);
 	}
 
@@ -445,15 +459,15 @@ void  MsgPrepareQuery(char log)	// cmd_sys 0x10
 // =====================================================================================================
 char PicProg(void)
 {
-   int s, l, progptr;
+   int s, progptr;
    char sBuf[16];
    WORD_VAL block_check;
 
    char crcdep;
    char crcseq;
    int  crcChk;
-   int rc;
-   (void) rc;
+   int len;
+   (void) len;
 
 //======================================================================================================
    switch (sm_picprog)
@@ -553,14 +567,12 @@ char PicProg(void)
 
 //------------------------------------------------------
     case PICPROG_REQUEST_OK:
-	  rc = fread(&prog_file_data[0], sizeof(unsigned char), PICBUF, picFw);
+	  len = fread(&prog_file_data[0], sizeof(unsigned char), PICBUF, picFw);
       sm_picprog = PICPROG_FLASH_BLOCK_START;
-	  l = 0;
-      while (l < PICBUF)
+      while (len < PICBUF)
       {
-         prog_file_data[l++] = 0xFF;
+         prog_file_data[len++] = 0xFF;
       }
-      sm_picprog = PICPROG_FLASH_BLOCK_START; 
 	  break;
 
 //------------------------------------------------------
@@ -591,7 +603,12 @@ char PicProg(void)
       }
 //	  printf("\ncrc %i ",block_check.Val);
 
-      if ((prog_address.byte.HB == 0xF0) || (block_check.Val == (int)(PICBUF * 255)))
+		if (verbose)
+		{
+			fprintf(stderr,"blk %02x %02x - chk: %02x %02x\n", prog_address.byte.HB, prog_address.byte.LB, block_check.byte.HB, block_check.byte.LB);	// scrittura a video
+		}
+
+	  if ((prog_address.byte.HB == 0xF0) || (block_check.Val == (int)(PICBUF * 255)))
       {
 		 printf("\nend of firmware \n");
          sm_picprog = PICPROG_FLASH_END;

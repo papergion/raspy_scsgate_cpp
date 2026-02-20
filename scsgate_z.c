@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_Z "
-#define VERSION  "1.77"
+#define VERSION  "1.78"
 // =========================== GESTIONE IMPIANTI ESTESI ==============================
 // =========================== GESTIONE DEVICES FISICI LOCALI ========================
 // indirizzo i2c base specificato da optarg -Ixx  (default 30) - si considera solo HB
@@ -74,7 +74,6 @@ char	immediatePicUpdate = 0;
 char	verbose = 0;	// 1=verbose     2=verbose+      3=debug
 char    dgenerici = 0;  // 1= ci sono dispositivi di tipo 11     2= ci sono dispositivi di tipo 12    3=entrambi
 // =============================================================================================
-static const char *serial0   = "/dev/serial0";	// gpio uart 1
 static const char *i2cdevice = "/dev/i2c-1";	// I2C bus
 // =============================================================================================
 char    i2cgate = 0;		// accesso schede locali i2c
@@ -100,12 +99,14 @@ char	i2cswitch = 0;
 char    huegate = 0;		// simulazione hue gate per alexa
 char    mqttgate = 0;		// connessione in/out a broker mqtt
 char    huemqtt_direct = 0;	// 1: ponte diretto hue -> mqtt (stati)     2: ponte hue -> mqtt (comandi)
-char    uartgate = 1;		// connessione in/out serial0 (uart)
+char    uartgate = 1;		// connessione in/out (uart)
 char	mqttbroker[24] = {0};
 char	user[24] = {0};
 char	password[24] = {0};
 char	my_busid = 0;
 char	extended = 0;
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // =============================================================================================
 struct termios tios_bak;
 struct termios tios;
@@ -183,8 +184,8 @@ enum _TCP_SM
 	char tcpuart = 0;
 // =============================================================================================
 char	sbyte;
-char    rx_prefix;
-char    rx_buffer[255];
+uint8_t rx_prefix;
+uint8_t rx_buffer[255];
 int     rx_len;
 int     rx_max = 250;
 char    rx_internal;
@@ -338,7 +339,7 @@ int setFirst(void)
 // ===================================================================================
 static void print_usage(const char *prog)	// NOT USED
 {
-	printf("Usage: %s [-uvHBUPIsD]\n", prog);
+	printf("Usage: %s [-uvHBUPIsDN]\n", prog);
 	puts("  -u --picupdate  immediate update pic eeprom \n"
 		 "  -v --verbose [1/2/3]  \n"
 		 "  -H --huegate interface(alexa)\n"
@@ -348,6 +349,8 @@ static void print_usage(const char *prog)	// NOT USED
 		 "  -I --i2c card connection\n"
 		 "  -s --i2c switch type [0-1-2]\n"		//0=fix x rele - puls x scs    1=fix x rele - deviatore x scs     2=pulsante all     3=pulsante scs    deviatore rele
 		 "  -D --direct connection hue->mqtt  1:state  2:command\n"
+//		 "  -S --uart speed (1-2-3) default 3\n"
+		 "  -N --uart dev name (/dev/serial0)\n"
 //		 "  -N --nouart no serial connection\n"		// comando privato
 		 );
 	exit(1);
@@ -355,12 +358,13 @@ static void print_usage(const char *prog)	// NOT USED
 // ===================================================================================
 static char parse_opts(int argc, char *argv[])	// NOT USED
 {
-	if ((argc < 1) || (argc > 10))
+	if ((argc < 1) || (argc > 11))
 	{
 		print_usage(PROGNAME);
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
@@ -371,14 +375,16 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 			{ "user",       2, 0, 'U' },
 			{ "password",   2, 0, 'P' },
 			{ "direct",     2, 0, 'D' },
-			{ "nouart",     0, 0, 'N' },
+//			{ "speed",		2, 0, 'S' },
+			{ "uart_name",	2, 0, 'N' },
+//			{ "nouart",     0, 0, 'N' },
 			{ "i2c",        2, 0, 'I' },
 			{ "switch",     1, 0, 's' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
-		c = getopt_long(argc, argv, "uv::HB::U:P:DNI::s:h", lopts, NULL);
+		c = getopt_long(argc, argv, "uv::HB::U:P:DN::I::s:h", lopts, NULL);
 		if (c == -1)
 			return 0;
 
@@ -413,9 +419,21 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 				huemqtt_direct=aTOchar(optarg);
 			if ((huemqtt_direct == 0) || (huemqtt_direct > 2)) huemqtt_direct = 1;		// simulazione hue gate per alexa
 			break;
-		case 'N':
-			printf("no uart serial connection\n");
-			uartgate = 0;	// senza connessione uart
+		case 'S': // uart speed
+			if (optarg) 
+			{
+				sspeed=aTOint(optarg);
+				printf("uart speed: %d\n",sspeed);
+			}
+			break;
+		case 'N': // uart name
+			if (optarg) 
+				strcpy(uartname, optarg);
+			else
+			{
+				printf("no uart serial connection\n");
+				uartgate = 0;	// senza connessione uart
+			}
 			break;
 		case 'B':
 			if (optarg) 
@@ -490,10 +508,10 @@ void UART_start(void)
 	printf("UART_Initialization\n");
 	fduart = -1;
 	
-	fduart = open(serial0, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+	fduart = open(uartname, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
 	if (fduart == -1) 
 	{
-		perror("open_port: Unable to open '/dev/serial0' \n");
+		fprintf(stderr, "unable to open %s\n",uartname);
         exit(EXIT_FAILURE);
 	}
 
@@ -955,7 +973,7 @@ void mqtt_dequeueExec( void)
 		busdevType[(int)busaddress.Val] = bustype;
 	}
 //	int  hueid = (int) _schedule_b[m].hueid;
-	char command = _schedule_b[m].buscommand;
+	unsigned char command = _schedule_b[m].buscommand;
 	char value = _schedule_b[m].busvalue;
 	char request = _schedule_b[m].busrequest;
 	char from = _schedule_b[m].busfrom;
@@ -1346,11 +1364,11 @@ int main(int argc, char *argv[])
 	int c = setFirst();
 	if (c < 0) 
 	{
-		perror("Serial0 write failed - ");
+		perror("UART write failed - ");
 		return -1;
 	}
 	else
-		if (verbose) fprintf(stderr,"Serial0 initialized - OK\n");
+		if (verbose) fprintf(stderr,"UART initialized - OK\n");
 
 	mSleep(20);					// pausa
 	rx_len = 0;
@@ -1739,7 +1757,7 @@ int main(int argc, char *argv[])
 			_scsrx.busrequest = rx_buffer[1];	// u
 			_scsrx.bustype = busdevType[(int)_scsrx.busaddress];
 
-			char hueid = busdevHue[(int)_scsrx.busaddress];
+			unsigned char hueid = busdevHue[(int)_scsrx.busaddress];
 
 			if (hueid != 0xff) 
 			{

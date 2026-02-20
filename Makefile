@@ -1,4 +1,5 @@
 #!make
+# scsgate
 # This make needs:
 # g++
 #
@@ -16,9 +17,11 @@ CC		:= g++
 
 #Flags, Libraries and Includes
 #CFLAGS.common	:= -std=c++17 -m$(BITS) -Wall -Wextra
-CFLAGS.common   := -std=c++17 -Wall -Wextra
+#CFLAGS.common   := -std=c++17 -Wall -Wextra -Wno-type-limits -Wno-unused-result
+CFLAGS.common   := -std=c++17 -Wall -Wextra -Wno-unused-result -Wno-switch-outside-range -fpermissive
 CFLAGS.debug 	:= $(CFLAGS.common) -g
-CFLAGS.release	:= $(CFLAGS.common) -Werror -O3
+#CFLAGS.release	:= $(CFLAGS.common) -Werror -O3
+CFLAGS.release  := $(CFLAGS.common) -Wno-error -O3
 CFLAGS			?= $(CFLAGS.$(BUILD))
 LIB		:= -L$(TARGETDIR) -leasysocket -lpthread -Wl,-rpath='$${ORIGIN}'
 INC		:= -I$(CURDIR)/../easysocket/include

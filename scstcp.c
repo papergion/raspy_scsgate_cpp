@@ -5,7 +5,7 @@
  * verifica 	ls /dev/serial*
  * ---------------------------------------------------------------------------*/
 #define PROGNAME "SCSTCP "
-#define VERSION  "1.10"
+#define VERSION  "1.11"
 //#define KEYBOARD
 
 #include <stdint.h>
@@ -71,6 +71,8 @@ char	httpcallback[128] = {0};
 char	httpaddress[18] = {0};
 char	httpport[8] = {0};
 struct	in_addr httpaddr;
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // =============================================================================================
   typedef union _WORD_VAL
   {
@@ -111,8 +113,8 @@ enum _TCP_SM
 	char 	last_response = 0;
 // =============================================================================================
 char	sbyte;
-char    rx_prefix;
-char    rx_buffer[255];
+unsigned char rx_prefix;
+unsigned char rx_buffer[255];
 int     rx_len;
 int     rx_max = 250;
 char    rx_internal;
@@ -176,32 +178,37 @@ int getinNowait( void )
 // ===================================================================================
 static void print_usage(const char *prog)	// NOT USED
 {
-	printf("Usage: %s [-upv]\n", prog);
+	printf("Usage: %s [-upvN]\n", prog);
 	puts("  -u --picupdate  immediate update pic eeprom \n"
 		 "  -p --port   \n"
+//		 "  -S --uart speed (1-2-3) default 3\n"
+		 "  -N --uart dev name (/dev/serial0)\n"
 		 "  -v --verbose   \n");
 	exit(1);
 }
 // ===================================================================================
 static char parse_opts(int argc, char *argv[])	// NOT USED
 {
-	if ((argc < 1) || (argc > 4))
+	if ((argc < 1) || (argc > 5))
 	{
 		print_usage(PROGNAME);
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 			{ "picupdate",  0, 0, 'u' },
 			{ "port",       1, 0, 'p' },
+//			{ "speed",		2, 0, 'S' },
+			{ "uart_name",	1, 0, 'N' },
 			{ "verbose",    0, 0, 'v' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "u p:v h", lopts, NULL);
+		c = getopt_long(argc, argv, "u p:N::v h", lopts, NULL);
 		if (c == -1)
 			return 0;
 
@@ -217,6 +224,10 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 			if (optarg) 
 				tcpport=aTOint(optarg);
 			printf("Port %d\n",tcpport);
+			break;
+		case 'N': // uart name
+			if (optarg) 
+				strcpy(uartname, optarg);
 			break;
 		case 'v':
 			verbose=1;
@@ -292,10 +303,11 @@ void UART_start(void)
 	printf("UART_Initialization\n");
 	fduart = -1;
 	
-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+//	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+	fduart = open(uartname, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
 	if (fduart == -1) 
 	{
-		perror("open_port: Unable to open /dev/serial0 - ");
+		fprintf(stderr, "unable to open %s\n",uartname);
         exit(EXIT_FAILURE);
 	}
 

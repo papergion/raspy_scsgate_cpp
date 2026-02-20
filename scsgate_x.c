@@ -5,12 +5,13 @@
  * verifica 	ls /dev/serial*
  * -------------------------------------------------------------------------------------------*/
 #define PROGNAME "SCSGATE_X "
-#define VERSION  "1.65"
+#define VERSION  "1.66"
 //#define KEYBOARD
 
 // =============================================================================================
 #define CONFIG_FILE "scsconfig"
 // =============================================================================================
+unsigned char PIC_START = 0xA7;  // ยง
 
 #include <stdint.h>
 #include <unistd.h>
@@ -60,10 +61,12 @@ char    dgenerici = 0;  // 1= ci sono dispositivi di tipo 11     2= ci sono disp
 char    huegate = 0;		// simulazione hue gate per alexa
 char    mqttgate = 0;		// connessione in/out a broker mqtt
 char    huemqtt_direct = 0;	// 1: ponte diretto hue -> mqtt (stati)     2: ponte hue -> mqtt (comandi)
-char    uartgate = 1;		// connessione in/out serial0 (uart)
-char	mqttbroker[24] = {0};
+char    uartgate = 1;		// connessione in/out (uart)
+char	mqttbroker[32] = {0};
 char	user[24] = {0};
 char	password[24] = {0};
+char	uartname[24] = {0};
+unsigned char sspeed = 3;
 // =============================================================================================
 struct termios tios_bak;
 struct termios tios;
@@ -126,8 +129,8 @@ enum _TCP_SM
 	char tcpuart = 0;
 // =============================================================================================
 char	sbyte;
-char    rx_prefix;
-char    rx_buffer[255];
+unsigned char    rx_prefix;
+unsigned char    rx_buffer[255];
 int     rx_len;
 int     rx_max = 250;
 char    rx_internal;
@@ -237,7 +240,7 @@ int setFirst(void)
 //  requestBuffer[requestLen++] = 'U'; // gestione tapparelle senza percentuale
 //  requestBuffer[requestLen++] = '9';
 
-  requestBuffer[requestLen++] = 'ง';
+  requestBuffer[requestLen++] = PIC_START;
   requestBuffer[requestLen++] = 'l'; // (in 0x17)
 
   n = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
@@ -247,7 +250,7 @@ int setFirst(void)
   rxBufferLoad(100);
 
   requestLen = 0;
-  requestBuffer[requestLen++] = 'ง';
+  requestBuffer[requestLen++] = PIC_START;
   requestBuffer[requestLen++] = 'Q'; 
   requestBuffer[requestLen++] = 'Q'; 
   n = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
@@ -280,6 +283,8 @@ static void print_usage(const char *prog)	// NOT USED
 		 "  -U --broker username\n"
 		 "  -P --broker password\n"
 		 "  -D --direct connection hue->mqtt  1:state  2:command\n"
+//		 "  -S --uart speed (1-2-3) default 3\n"
+		 "  -N --uart dev name (/dev/serial0)\n"
 //		 "  -N --nouart no serial connection\n"		// comando privato
 		 );
 	exit(1);
@@ -287,12 +292,13 @@ static void print_usage(const char *prog)	// NOT USED
 // ===================================================================================
 static char parse_opts(int argc, char *argv[])	// NOT USED
 {
-	if ((argc < 1) || (argc > 9))
+	if ((argc < 1) || (argc > 10))
 	{
 		print_usage(PROGNAME);
 		return 3;
 	}
 
+	strcpy(uartname,"/dev/serial0");
 	while (1) {
 		static const struct option lopts[] = {
 //------------longname---optarg---short--      0=no optarg    1=optarg obbligatorio     2=optarg facoltativo
@@ -303,12 +309,14 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 			{ "user",       2, 0, 'U' },
 			{ "password",   2, 0, 'P' },
 			{ "direct",     2, 0, 'D' },
-			{ "nouart",     0, 0, 'N' },
+//			{ "nouart",     0, 0, 'N' },
+//			{ "speed",		2, 0, 'S' },
+			{ "uart_name",	2, 0, 'N' },
 			{ "help",		0, 0, '?' },
 			{ NULL, 0, 0, 0 },
 		};
 		int c;
-		c = getopt_long(argc, argv, "uv::HB::U:P:DNh", lopts, NULL);
+		c = getopt_long(argc, argv, "uv::HB::U:P:DN::h", lopts, NULL);
 		if (c == -1)
 			return 0;
 
@@ -331,10 +339,6 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 				huemqtt_direct=aTOchar(optarg);
 			if ((huemqtt_direct == 0) || (huemqtt_direct > 2)) huemqtt_direct = 1;		// simulazione hue gate per alexa
 			break;
-		case 'N':
-			printf("no uart serial connection\n");
-			uartgate = 0;	// senza connessione uart
-			break;
 		case 'B':
 			if (optarg) 
 				strcpy(mqttbroker, optarg);
@@ -350,6 +354,22 @@ static char parse_opts(int argc, char *argv[])	// NOT USED
 		case 'P':
 			if (optarg) 
 				strcpy(password, optarg);
+			break;
+		case 'S': // uart speed
+			if (optarg) 
+			{
+				sspeed=aTOint(optarg);
+				printf("uart speed: %d\n",sspeed);
+			}
+			break;
+		case 'N': // uart name
+			if (optarg) 
+				strcpy(uartname, optarg);
+			else
+			{
+				printf("no uart serial connection\n");
+				uartgate = 0;	// senza connessione uart
+			}
 			break;
 		case 'v':
 			if (optarg) 
@@ -407,11 +427,11 @@ void UART_start(void)
 
 	printf("UART_Initialization\n");
 	fduart = -1;
-	
-	fduart = open("/dev/serial0", O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
+
+	fduart = open(uartname, O_RDWR | O_NOCTTY | O_NDELAY);		//Open in non blocking read/write mode
 	if (fduart == -1) 
 	{
-		perror("open_port: Unable to open /dev/serial0 - ");
+		fprintf(stderr, "unable to open %s\n",uartname);
         exit(EXIT_FAILURE);
 	}
 
@@ -537,7 +557,7 @@ void bufferPicLoad(char * decBuffer)
 
 		char requestBuffer[16];
 		int requestLen = 0;
-		requestBuffer[requestLen++] = 'ง';
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'U';
 		requestBuffer[requestLen++] = '8';
 		requestBuffer[requestLen++] = device;     // device id
@@ -562,7 +582,8 @@ void bufferPicLoad(char * decBuffer)
 	  {
 		rx_len = 0;
 		rxBufferLoad(10);	// discard uart input
-		write(fduart,"งU9",3);			// scrittura su scsgate
+		write(fduart,PIC_START,1);		// scrittura su scsgate
+		write(fduart,"U9",2);			// scrittura su scsgate
 		if (waitReceive('k') == 0)
 			printf("  -->PIC communication ERROR...\n");
 	  }  // cover == "false"
@@ -614,7 +635,7 @@ void mqtt_dequeueExec( void)
 		busdevType[(int)busid] = bustype;
 	}
 //	int  hueid = (int) _schedule_b[m].hueid;
-	char command = _schedule_b[m].buscommand;
+	unsigned char command = _schedule_b[m].buscommand;
 	char value = _schedule_b[m].busvalue;
 	char request = _schedule_b[m].busrequest;
 	char from = _schedule_b[m].busfrom;
@@ -627,7 +648,7 @@ void mqtt_dequeueExec( void)
 	int requestLen = 0;
 	if ((command == 0xFF) && (busid != 0) && (bustype == 9))
 	{
-	  requestBuffer[requestLen++] = 'ง';
+	  requestBuffer[requestLen++] = PIC_START;
 	  requestBuffer[requestLen++] = 'u';    // 0x79 (@y: invia a pic da MQTT cmd tapparelle % da inviare sul bus)
 	  requestBuffer[requestLen++] = busid; // to   device
 	  requestBuffer[requestLen++] = value;	// %
@@ -636,7 +657,7 @@ void mqtt_dequeueExec( void)
 	else
 	if ((command == 0xFF) && (busid != 0) && (bustype == 3))
 	{
-		  requestBuffer[requestLen++] = 'ง';
+		  requestBuffer[requestLen++] = PIC_START;
 		  requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
 		  requestBuffer[requestLen++] = busid; // to   device
 		  requestBuffer[requestLen++] = from;   // from device
@@ -666,7 +687,7 @@ void mqtt_dequeueExec( void)
 	{
 	//    if (devtype != 11)	// <====================not GENERIC=======================
 		{
-		  requestBuffer[requestLen++] = 'ง';
+		  requestBuffer[requestLen++] = PIC_START;
 		  requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
 		  requestBuffer[requestLen++] = busid; // to   device
 		  requestBuffer[requestLen++] = from;   // from device
@@ -724,8 +745,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 	    
-	// comando งy<destaddress><source><type><command>
-		requestBuffer[requestLen++] = 'ง';
+	// comando ยงy<destaddress><source><type><command>
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = busid;   // to device id
 		requestBuffer[requestLen++] = 0x00;    // from device id
@@ -769,8 +790,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 
-	// comando งy<destaddress><source><type><command>
-		requestBuffer[requestLen++] = 'ง';
+	// comando ยงy<destaddress><source><type><command>
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = busid;   // to device id
 		requestBuffer[requestLen++] = 0x00;    // from device id
@@ -803,8 +824,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 
-	// comando งy<destaddress><source><type><command>
-		requestBuffer[requestLen++] = 'ง';
+	// comando ยงy<destaddress><source><type><command>
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = busid;   // to device id
 		requestBuffer[requestLen++] = 0x00;    // from device id
@@ -845,7 +866,7 @@ void hue_dequeueExec( void)
 		break;
 	  }
 
-	  requestBuffer[requestLen++] = 'ง';
+	  requestBuffer[requestLen++] = PIC_START;
 	  requestBuffer[requestLen++] = 'u';
 	  requestBuffer[requestLen++] = busid;   // to device id
 	  requestBuffer[requestLen++] = (char) pct; // command char
@@ -950,11 +971,11 @@ int main(int argc, char *argv[])
 	int c = setFirst();
 	if (c < 0) 
 	{
-		perror("Serial0 write failed - ");
+		perror("UART write failed - ");
 		return -1;
 	}
 	else
-		if (verbose) fprintf(stderr,"Serial0 initialized - OK\n");
+		if (verbose) fprintf(stderr,"UART initialized - OK\n");
 
 	mSleep(20);					// pausa
 	rx_len = 0;
@@ -1070,6 +1091,25 @@ int main(int argc, char *argv[])
 				{
 				    _scsrx.busid = rx_buffer[2];  // to
 				    _scsrx.busfrom = rx_buffer[3];  // from
+
+					// testare azione 0/1 (on/off) ?
+
+					_scsrx.buscommand = rx_buffer[5];
+					uint16_t xDevice = 0;
+					while (xDevice < 190) // fino a 0xB0
+					{
+						if ((busdevType[(int)xDevice] == 1) || (busdevType[(int)xDevice] == 3)) // switch or dimmer
+						{
+							_scsrx.busid = (unsigned char) xDevice;  // to
+							_scsrx.bustype = busdevType[(int)xDevice];
+							MQTTrequest(&_scsrx);
+						}
+						xDevice++;
+					}
+				    _scsrx.busid = rx_buffer[2];  // to
+				    _scsrx.busfrom = rx_buffer[3];  // from
+//					_scsrx.busid = 0;
+//					_scsrx.busfrom = 0;  // to
 				}
 				else
  				if (rx_buffer[2] < 0xB0)
@@ -1133,7 +1173,7 @@ int main(int argc, char *argv[])
 			_scsrx.busrequest = rx_buffer[1];	// u
 			_scsrx.bustype = busdevType[(int)_scsrx.busid];
 
-			char hueid = busdevHue[(int)_scsrx.busid];
+			unsigned char hueid = busdevHue[(int)_scsrx.busid];
 
 			if (hueid != 0xff) 
 			{
