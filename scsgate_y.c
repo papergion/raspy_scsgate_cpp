@@ -24,6 +24,7 @@
 // =============================================================================================
 #define CONFIG_FILE "scsconfig"
 // =============================================================================================
+unsigned char PIC_START = 0xA7;  // ยง
 
 #include <stdint.h>
 #include <unistd.h>
@@ -294,7 +295,7 @@ int setFirst(void)
 //  requestBuffer[requestLen++] = 'U'; // gestione tapparelle senza percentuale
 //  requestBuffer[requestLen++] = '9';
 
-  requestBuffer[requestLen++] = 'ง';
+  requestBuffer[requestLen++] = PIC_START;
   requestBuffer[requestLen++] = 'l'; // (in 0x17)
 
   n = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
@@ -304,7 +305,7 @@ int setFirst(void)
   rxBufferLoad(100);
 
   requestLen = 0;
-  requestBuffer[requestLen++] = 'ง';
+  requestBuffer[requestLen++] = PIC_START;
   requestBuffer[requestLen++] = 'Q'; 
   requestBuffer[requestLen++] = 'Q'; 
   n = write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
@@ -730,7 +731,7 @@ void bufferPicLoad(char * decBuffer)
 
 		char requestBuffer[16];
 		int requestLen = 0;
-		requestBuffer[requestLen++] = 'ง';
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'U';
 		requestBuffer[requestLen++] = '8';
 		requestBuffer[requestLen++] = device;     // device id
@@ -755,7 +756,9 @@ void bufferPicLoad(char * decBuffer)
 	  {
 		rx_len = 0;
 		rxBufferLoad(10);	// discard uart input
-		write(fduart,"งU9",3);			// scrittura su scsgate
+		write(fduart,PIC_START,1);		// scrittura su scsgate
+		write(fduart,"U9",2);			// scrittura su scsgate
+
 		if (waitReceive('k') == 0)
 			printf("  -->PIC communication ERROR...\n");
 	  }  // cover == "false"
@@ -876,7 +879,7 @@ void mqtt_dequeueExec( void)
 			int requestLen = 0;
 			if ((command == 0xFF) && (busid != 0) && (bustype == 0x09))
 			{
-			  requestBuffer[requestLen++] = 'ง';
+			  requestBuffer[requestLen++] = PIC_START;
 			  requestBuffer[requestLen++] = 'u';    // 0x79 (@y: invia a pic da MQTT cmd tapparelle % da inviare sul bus)
 			  requestBuffer[requestLen++] = busid; // to   device
 			  requestBuffer[requestLen++] = value;	// %
@@ -885,7 +888,7 @@ void mqtt_dequeueExec( void)
 			{
 			//    if (devtype != 11)	// <====================not GENERIC=======================
 				{
-				  requestBuffer[requestLen++] = 'ง';
+				  requestBuffer[requestLen++] = PIC_START;
 				  requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
 				  requestBuffer[requestLen++] = busid; // to   device
 				  requestBuffer[requestLen++] = from;   // from device
@@ -968,8 +971,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 	    
-	// comando งy<destaddress><source><type><command>
-		requestBuffer[requestLen++] = 'ง';
+	// comando ยงy<destaddress><source><type><command>
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = busid;   // to device id
 		requestBuffer[requestLen++] = 0x00;    // from device id
@@ -1015,8 +1018,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 
-	// comando งy<destaddress><source><type><command>
-		requestBuffer[requestLen++] = 'ง';
+	// comando ยงy<destaddress><source><type><command>
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = busid;   // to device id
 		requestBuffer[requestLen++] = 0x00;    // from device id
@@ -1049,8 +1052,8 @@ void hue_dequeueExec( void)
 	  else
 		break;
 
-	// comando งy<destaddress><source><type><command>
-		requestBuffer[requestLen++] = 'ง';
+	// comando ยงy<destaddress><source><type><command>
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = busid;   // to device id
 		requestBuffer[requestLen++] = 0x00;    // from device id
@@ -1091,7 +1094,7 @@ void hue_dequeueExec( void)
 		break;
 	  }
 
-	  requestBuffer[requestLen++] = 'ง';
+	  requestBuffer[requestLen++] = PIC_START;
 	  requestBuffer[requestLen++] = 'u';
 	  requestBuffer[requestLen++] = busid;   // to device id
 	  requestBuffer[requestLen++] = (char) pct; // command char
@@ -1162,7 +1165,7 @@ char I2Crequest(bus_scs_queue * busdata, char option)  // 1=answer ack      2=an
 	{
 		char requestBuffer[16];
 		int requestLen = 0;
-		requestBuffer[requestLen++] = 'ง';
+		requestBuffer[requestLen++] = PIC_START;
 		requestBuffer[requestLen++] = 'y';
 		requestBuffer[requestLen++] = 0xB8;   // to device id
 		requestBuffer[requestLen++] = busdata->busid;    // from device id
@@ -1402,6 +1405,23 @@ int main(int argc, char *argv[])
 				{
 				    _scsrx.busid = rx_buffer[2];  // to
 				    _scsrx.busfrom = rx_buffer[3];  // from
+
+					// testare azione 0/1 (on/off) ?
+
+					_scsrx.buscommand = rx_buffer[5];
+					uint16_t xDevice = 0;
+					while (xDevice < 190) // fino a 0xB0
+					{
+						if ((busdevType[(int)xDevice] == 1) || (busdevType[(int)xDevice] == 3)) // switch or dimmer
+						{
+							_scsrx.busid = (unsigned char) xDevice;  // to
+							_scsrx.bustype = busdevType[(int)xDevice];
+							MQTTrequest(&_scsrx);
+						}
+						xDevice++;
+					}
+				    _scsrx.busid = rx_buffer[2];  // to
+				    _scsrx.busfrom = rx_buffer[3];  // from
 				}
 				else
 	// ==========================================================================================================
@@ -1537,7 +1557,7 @@ int main(int argc, char *argv[])
 
 						if (verbose)
 							printf("--> bus cmd address: %02X\n",i2cInpBusAddress[ixpoll][ixd]);
-						// se il tipo di indirizzo comandato ่ SCS (1 o 3) schedula il comando
+						// se il tipo di indirizzo comandato ยง SCS (1 o 3) schedula il comando
 						if ((bustyp == 1) || (bustyp == 3))
 						{
 //	i2cswitch 
@@ -1547,7 +1567,7 @@ int main(int argc, char *argv[])
 								command = busdevState[(int)busid] ^ 1;
 								char requestBuffer[24];
 								int requestLen = 0;
-								requestBuffer[requestLen++] = 'ง';
+								requestBuffer[requestLen++] = PIC_START;
 								requestBuffer[requestLen++] = 'y';    // 0x79 (@y: invia a pic da MQTT cmd standard da inviare sul bus)
 								requestBuffer[requestLen++] = busid; // to   device
 								requestBuffer[requestLen++] = 0x01;   // from device
@@ -1566,7 +1586,7 @@ int main(int argc, char *argv[])
 								busdevState[(int)busid] = command;
 							}
 						}
-						// se il tipo di indirizzo comandato ่ i2c (da 30 a 3F) genera il comando
+						// se il tipo di indirizzo comandato ยง i2c (da 30 a 3F) genera il comando
 						else
 						if ((bustyp >= 0x30) && (bustyp <= 0x3F))	// dispositivo i2c do output
 						{

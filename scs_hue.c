@@ -662,7 +662,7 @@ int HUE_start(char verb)
 		std::string request = (char *) message;
 		if (request.find("M-SEARCH") != std::string::npos) 
 		{
-		  if ((request.find("upnp:rootdevice") != std::string::npos) || (request.find("device:basic:1") != std::string::npos)) 
+		  if ((request.find("upnp:rootdevice") != std::string::npos) || (request.find("device:Basic:1") != std::string::npos)) 
 		  {
 //			  cout << "\n\nudp request for alexa:  \n" << ipv4 << ":" << port << " => " << message << endl; // "(" << length << ")" << endl;
 			  if (hueverbose>2) printf ("\n\nudp request for alexa - answered");
@@ -675,7 +675,7 @@ int HUE_start(char verb)
 				"LOCATION: http://%s:%d/description.xml\r\n"
 				"SERVER: FreeRTOS/6.0.5, UPnP/1.0, IpBridge/1.17.0\r\n"		// _modelName, _modelNumber - 1.16.0 ?
 				"hue-bridgeid: %s\r\n"
-				"ST: urn:schemas-upnp-org:device:basic:1\r\n"				// _deviceType
+				"ST: urn:schemas-upnp-org:device:Basic:1\r\n"				// _deviceType
 				"USN: uuid:2f402f80-da50-11e1-9b23-%s::upnp:rootdevice\r\n" // _uuid::_deviceType
 				"\r\n";
 			// =============================================================================================
