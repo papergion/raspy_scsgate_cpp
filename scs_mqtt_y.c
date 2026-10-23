@@ -537,7 +537,11 @@ char MQTTrequest(bus_scs_queue * busdata)
 		devtype = 15;
 		strcpy(topic, SENSOR_TEMP_STATE);
 		strcat(topic, nomeDevice);
-      	sprintf(payload, "%03u", busdata->busvalue);
+		if (busdata->busfrom == 0xB5) 
+	      	sprintf(payload, "%03u", (0xFF + busdata->busvalue));
+		else
+	      	sprintf(payload, "%03u", busdata->busvalue);
+
 		payload[4]= 0;
 		payload[3]= payload[2];
 		payload[2]= ',';		// virtual decimal point

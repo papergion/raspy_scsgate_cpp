@@ -1499,7 +1499,7 @@ int main(int argc, char *argv[])
 
 			if (_scsrx.busrequest == 0x30)  // <-termostato----------------------------
 			{
- 				if (rx_buffer[2] == 0xB4)
+ 				if ((rx_buffer[2] == 0xB4) || (rx_buffer[2] == 0xB5)) 
 				{
 					thisaddress.byte.LB = rx_buffer[3];	// device
 					if (thisaddress.Val > MAXDEV) thisaddress.Val = 0; 

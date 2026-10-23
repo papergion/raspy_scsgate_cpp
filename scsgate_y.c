@@ -1381,10 +1381,10 @@ int main(int argc, char *argv[])
 
 			if (_scsrx.busrequest == 0x30)  // <-termostato----------------------------
 			{
- 				if (rx_buffer[2] == 0xB4)
+ 				if ((rx_buffer[2] == 0xB4) || (rx_buffer[2] == 0xB5)) 
 				{
 				    _scsrx.busid = rx_buffer[3];	// device
-				    _scsrx.busfrom = rx_buffer[2];  // from
+				    _scsrx.busfrom = rx_buffer[2];  // from -B4/B5-
 
 					_scsrx.buscommand = 0;
 					_scsrx.bustype = busdevType[(int)_scsrx.busid];
