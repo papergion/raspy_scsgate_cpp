@@ -513,9 +513,14 @@ int	waitReceive(char w)
     {
 		r = -1;
 		r = read(fduart, &sbyte, 1);
-	    if ((r > 0) && (sbyte == w))
+	    if (r > 0)
 		{
-			return 1;
+		    if (sbyte == w)
+				return 1;
+			else
+			{
+			 if (verbose) printf("w?%02x?", sbyte);
+			}
 		}
 		else
 			loop++;
@@ -533,6 +538,9 @@ void bufferPicLoad(char * decBuffer)
   char alexadescr[32] = {0};
   char stype[8];
 
+//  if (verbose)
+//	printf (decBuffer);
+
   tcpJarg(decBuffer,"\"device\"",busid);
   if (busid[0] != 0)
   {
@@ -541,8 +549,14 @@ void bufferPicLoad(char * decBuffer)
 	{
 	  tcpJarg(decBuffer,"\"descr\"",alexadescr);
 	  tcpJarg(decBuffer,"\"type\"",stype);
-	  devtype = aTOchar(stype);
-//	  devType[(int)device] = devtype;
+
+	  if (stype[0] == 'x')
+		  devtype = axTOchar(&stype[1]);
+	  else
+	  if (stype[1] == 'x')
+		  devtype = axTOchar(&stype[2]);
+	  else
+		  devtype = aTOchar(stype);
 
 	  if (devtype == 9)			// w6 - aggiorna tapparelle pct su pic
 	  {
@@ -567,11 +581,32 @@ void bufferPicLoad(char * decBuffer)
 		write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
 
 		if (waitReceive('k') == 0)
-			printf("  -->PIC communication ERROR...\n");
+		{
+			printf("  -->PIC communication ERROR... : %s \n",decBuffer);
+		}
 	  }
-//				  else
-//					maxp.Val = 0;
+	  else
+	  if ((devtype == 0x80) || (devtype == 0x81))			// dispositivi auto_ack 
+	  {
+		rx_len = 0;
+		rxBufferLoad(10);	// discard uart input
 
+		char requestBuffer[16];
+		int requestLen = 0;
+		requestBuffer[requestLen++] = PIC_START;
+		requestBuffer[requestLen++] = 'U';
+		requestBuffer[requestLen++] = '8';
+		requestBuffer[requestLen++] = device;     // device id
+		requestBuffer[requestLen++] = devtype;    // device type
+		requestBuffer[requestLen++] = 0;    // max position H
+		requestBuffer[requestLen++] = 0;    // max position L
+		write(fduart,requestBuffer,requestLen);			// scrittura su scsgate
+
+		if (waitReceive('k') == 0)
+		{
+			printf("  -->PIC communication ERROR... : %s \n",decBuffer);
+		}
+	  }
 	} // deviceX > 0
   }  // busid != ""
   else
@@ -582,10 +617,15 @@ void bufferPicLoad(char * decBuffer)
 	  {
 		rx_len = 0;
 		rxBufferLoad(10);	// discard uart input
-		write(fduart,PIC_START,1);		// scrittura su scsgate
-		write(fduart,"U9",2);			// scrittura su scsgate
+		char requestBuffer[8];
+		requestBuffer[0] = PIC_START;
+		requestBuffer[1] = 'U';
+		requestBuffer[2] = '9';
+		write(fduart,requestBuffer,3);			// scrittura su scsgate
 		if (waitReceive('k') == 0)
-			printf("  -->PIC communication ERROR...\n");
+		{
+			printf("  -->PIC communication ERROR... : %s \n",decBuffer);
+		}
 	  }  // cover == "false"
   }
 }	
@@ -597,8 +637,11 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
   char devtype;
   char alexadescr[32] = {0};
   char stype[8];
+//  if (verbose)
+//	printf (decBuffer);
 
   tcpJarg(decBuffer,"\"device\"",busid);
+
   if (busid[0] != 0)
   {
 	device = axTOchar(busid);
@@ -606,11 +649,20 @@ void BufferMemo(char * decBuffer, char hueaction)  //  hueaction 1=add device
 	{
 	  tcpJarg(decBuffer,"\"descr\"",alexadescr);
 	  tcpJarg(decBuffer,"\"type\"",stype);
-	  devtype = aTOchar(stype);
+
+	  if (stype[0] == 'x')
+		  devtype = axTOchar(&stype[1]);
+	  else
+	  if (stype[1] == 'x')
+		  devtype = axTOchar(&stype[2]);
+	  else
+		  devtype = aTOchar(stype);
+
 	  busdevType[(int)device] = devtype;
 	  if (devtype == 11) dgenerici |= 0x01;
 	  if (devtype == 12) dgenerici |= 0x02;
-	  printf("device %2X tipo %02u - %s \n",device,devtype,alexadescr);
+//	  printf("device %2X tipo %02u - %s \n",device,devtype,alexadescr);
+	  printf("device %02X tipo %02u (0x%02X) - %s \n",device,devtype,devtype,alexadescr);
 
 	  if ((hueaction) && (devtype < 11))		// w6 - alexa non ha bisogno dei types 0x0B 0x0C (11-12) 0x0E 0x0F 0x12 0x13 (18 19)
 	  {
@@ -905,17 +957,14 @@ void hue_dequeueExec( void)
 	}
 }
 // ===================================================================================
-
-
-
-
-
-
-
-
-
-
-
+//void immediateAck(void)
+//{
+//	requestBuffer[0] = PIC_START;
+//	requestBuffer[1] = 'W';
+//	requestBuffer[2] = 1;
+//	requestBuffer[3] = 0xA5;
+//	if (uartgate) write(fduart,requestBuffer,4);			// scrittura su scsgate
+//}
 // ===================================================================================
 int main(int argc, char *argv[])
 {
@@ -1067,10 +1116,10 @@ int main(int argc, char *argv[])
 
 			if (_scsrx.busrequest == 0x30)  // <-termostato----------------------------
 			{
- 				if (rx_buffer[2] == 0xB4)
+ 				if ((rx_buffer[2] == 0xB4) || (rx_buffer[2] == 0xB5)) 
 				{
 				    _scsrx.busid = rx_buffer[3];	// device
-				    _scsrx.busfrom = rx_buffer[2];  // from
+				    _scsrx.busfrom = rx_buffer[2];  // from -B4/B5-
 
 					_scsrx.buscommand = 0;
 					_scsrx.bustype = busdevType[(int)_scsrx.busid];
