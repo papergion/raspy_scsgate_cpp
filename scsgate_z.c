@@ -157,6 +157,7 @@ char busdevType[MAXDEV] = {0};
 				// 0x0E:14-allarme	SCS				0x0F:15-termostato SCS
 				// 0x30-0x3F:48-63 - rele o pulsanti i2c
 				// 0x40-0x4F:64-79 - pulsanti i2c
+				// 0x80-0x81: switch auto-ack
 
 char busdevHue [MAXDEV] = {0};
 char busdevState[MAXDEV] = {1};
@@ -778,10 +779,15 @@ void bufferPicLoad(char * decBuffer)
 	  {
 		rx_len = 0;
 		rxBufferLoad(10);	// discard uart input
-		write(fduart,PIC_START,1);		// scrittura su scsgate
-		write(fduart,"U9",2);			// scrittura su scsgate
+		char requestBuffer[8];
+		requestBuffer[0] = PIC_START;
+		requestBuffer[1] = 'U';
+		requestBuffer[2] = '9';
+		write(fduart,requestBuffer,3);			// scrittura su scsgate
 		if (waitReceive('k') == 0)
-			printf("  -->PIC communication ERROR...\n");
+		{
+			printf("  -->PIC communication ERROR... : %s \n",decBuffer);
+		}
 	  }  // cover == "false"
 	  char extend[8];
 	  char cbusid[8];
@@ -793,12 +799,12 @@ void bufferPicLoad(char * decBuffer)
 		extended = 1;
 		tcpJarg(decBuffer,"\"busid\"",cbusid);
 		my_busid=axTOchar(cbusid);
-
-		write(fduart,PIC_START,1);		// scrittura su scsgate
-		write(fduart,"O1",2);			// scrittura su scsgate
-		char c = my_busid+'0';		// 
-		write(fduart,&c,1);			// busid (ASCII)
-
+		char requestBuffer[8];
+		requestBuffer[0] = PIC_START;
+		requestBuffer[1] = 'O';
+		requestBuffer[2] = '1';
+		requestBuffer[3] = my_busid+'0';
+		write(fduart,requestBuffer,3);			// scrittura su scsgate
 	  }  // cover == "false"
 	  else
 	  {
@@ -1079,6 +1085,8 @@ void hue_dequeueExec( void)
 	// --------------------------------------- SWITCHES -------------------------------------------
 
 	case 1:
+	case 0x80:
+	case 0x81:
 	  if (huecommand == 1) // accendi <----------------
 	  {
 		command = 0;

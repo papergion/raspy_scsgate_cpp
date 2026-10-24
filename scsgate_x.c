@@ -102,7 +102,7 @@ char busdevType[256] = {0};
 				// 0x0E:allarme		 0x0F termostato
 				// 0x30-0x37:rele i2c
 				// 0x40-0x47:pulsanti i2c
-
+				// 0x80-0x81: switch auto-ack
 char busdevHue [256] = {0};
 
 extern std::vector<hue_device_t> _devices;
@@ -784,6 +784,8 @@ void hue_dequeueExec( void)
 	{
 	// --------------------------------------- SWITCHES -------------------------------------------
 	case 1:
+	case 0x80:
+	case 0x81:
 	  if (huecommand == 1) // accendi <----------------
 	  {
 		command = 0;
@@ -1147,7 +1149,8 @@ int main(int argc, char *argv[])
 					uint16_t xDevice = 0;
 					while (xDevice < 190) // fino a 0xB0
 					{
-						if ((busdevType[(int)xDevice] == 1) || (busdevType[(int)xDevice] == 3)) // switch or dimmer
+						if ((busdevType[(int)xDevice] == 1) || (busdevType[(int)xDevice] == 3)
+						||  (busdevType[(int)xDevice] == 0x80) || (busdevType[(int)xDevice] == 0x81)) // switch or dimmer
 						{
 							_scsrx.busid = (unsigned char) xDevice;  // to
 							_scsrx.bustype = busdevType[(int)xDevice];
